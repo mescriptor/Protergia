@@ -1,4 +1,33 @@
-REFERENCE HOUSE — V9 LIGHTING-ONLY REVIEW
+REFERENCE HOUSE — V10 REFERENCE CONTRAST
+
+Current scene: Assets/ReferenceHouse/Scenes/ReferenceHouse.unity
+Current render: Blender/ReferenceHouse/Preview_Contrast_After_v10.png
+Before render: Blender/ReferenceHouse/Preview_Contrast_Before_v10.png
+Comparison.html shows the reference and the before/after renders.
+
+V10 reduces frontal and room fill, deepens the basement recesses, and retains
+directional window light and warm practical lights. The sun is 1.36, front
+bounce 0.70, living/upper opening light 0.35/0.30, room fills 0.04 and basement
+bounce 0.38. The two bounce lights now cast soft shadows, using medium shadow
+resolution so the practical lights retain their full shadow resolution.
+Ambient sky/equator/ground colors are lowered; localized SSAO intensity is 0.57.
+Exposure and contrast remain at the V9 values, 0.04 and 12.
+
+Only Charcoal_architectural_frame.mat changes among surface assets. It is shared
+by the roof beam and the two front slab bands; its color is (0.39,0.395,0.385).
+All 2,593 other material, texture, mesh and prefab files match the V10 snapshot.
+Camera settings and all model transform overrides are unchanged.
+
+Lighting was baked on the RTX 4060 with 128 direct, 1024 indirect and 512
+environment samples and six bounces. A fresh Unity process restored both
+directional lightmaps, 410 mapped renderers and 150 probes, then rendered the
+saved scene. No shadow-atlas downscaling was reported on the final pass.
+The original Unity assets and render are in Blender/ReferenceHouse/BeforeContrastV10.
+Menu: Reference House > Refine reference contrast and bake (V10).
+Apply V10 after older look/import menus to restore the current appearance.
+The Blender source remains V8; the current look is authored in Unity.
+
+PREVIOUS V9 — LIGHTING-ONLY REVIEW
 
 Current scene: Assets/ReferenceHouse/Scenes/ReferenceHouse.unity
 Current render: Blender/ReferenceHouse/Preview_Lighting_After_v9.png

@@ -20,9 +20,9 @@ RenderSettings:
   m_FogDensity: 0.01
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
-  m_AmbientSkyColor: {r: 0.43, g: 0.48, b: 0.57, a: 1}
-  m_AmbientEquatorColor: {r: 0.34, g: 0.35, b: 0.36, a: 1}
-  m_AmbientGroundColor: {r: 0.18, g: 0.17, b: 0.145, a: 1}
+  m_AmbientSkyColor: {r: 0.38, g: 0.43, b: 0.5, a: 1}
+  m_AmbientEquatorColor: {r: 0.27, g: 0.28, b: 0.3, a: 1}
+  m_AmbientGroundColor: {r: 0.15, g: 0.145, b: 0.125, a: 1}
   m_AmbientIntensity: 0.62
   m_AmbientMode: 1
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
@@ -163,7 +163,7 @@ Light:
   serializedVersion: 12
   m_Type: 2
   m_Color: {r: 0.98, g: 0.95, b: 0.89, a: 1}
-  m_Intensity: 0.09
+  m_Intensity: 0.04
   m_Range: 4.2
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -471,7 +471,7 @@ Light:
   serializedVersion: 12
   m_Type: 1
   m_Color: {r: 1, g: 0.963, b: 0.895, a: 1}
-  m_Intensity: 1.48
+  m_Intensity: 1.36
   m_Range: 0
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -744,7 +744,7 @@ Light:
   serializedVersion: 12
   m_Type: 1
   m_Color: {r: 0.83, g: 0.91, b: 1, a: 1}
-  m_Intensity: 0.085
+  m_Intensity: 0.04
   m_Range: 0
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -998,7 +998,7 @@ Light:
   serializedVersion: 12
   m_Type: 0
   m_Color: {r: 1, g: 0.89, b: 0.76, a: 1}
-  m_Intensity: 0.68
+  m_Intensity: 0.52
   m_Range: 4
   m_SpotAngle: 108
   m_InnerSpotAngle: 51.84
@@ -1215,7 +1215,7 @@ Light:
   serializedVersion: 12
   m_Type: 0
   m_Color: {r: 1, g: 0.89, b: 0.76, a: 1}
-  m_Intensity: 0.68
+  m_Intensity: 0.52
   m_Range: 4
   m_SpotAngle: 108
   m_InnerSpotAngle: 51.84
@@ -1342,18 +1342,18 @@ Light:
   serializedVersion: 12
   m_Type: 2
   m_Color: {r: 0.9, g: 0.95, b: 1, a: 1}
-  m_Intensity: 0.78
+  m_Intensity: 0.38
   m_Range: 6.5
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
   m_CookieSize2D: {x: 0.5, y: 0.5}
   m_Shadows:
-    m_Type: 0
+    m_Type: 2
     m_Resolution: -1
     m_CustomResolution: -1
     m_Strength: 1
-    m_Bias: 0.05
-    m_NormalBias: 0.4
+    m_Bias: 0.025
+    m_NormalBias: 0.12
     m_NearPlane: 0.2
     m_CullingMatrixOverride:
       e00: 1
@@ -1391,7 +1391,7 @@ Light:
   m_UseBoundingSphereOverride: 0
   m_UseViewFrustumForShadowCasterCull: 1
   m_ForceVisible: 0
-  m_ShadowRadius: 0
+  m_ShadowRadius: 0.35
   m_ShadowAngle: 0
   m_LightUnit: 1
   m_LuxAtDistance: 1
@@ -1409,7 +1409,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
-  m_AdditionalLightsShadowResolutionTier: 2
+  m_AdditionalLightsShadowResolutionTier: 1
   m_CustomShadowLayers: 0
   m_LightCookieSize: {x: 1, y: 1}
   m_LightCookieOffset: {x: 0, y: 0}
@@ -2280,7 +2280,7 @@ Light:
   serializedVersion: 12
   m_Type: 3
   m_Color: {r: 0.92, g: 0.96, b: 1, a: 1}
-  m_Intensity: 0.6
+  m_Intensity: 0.35
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -2624,7 +2624,7 @@ Light:
   serializedVersion: 12
   m_Type: 0
   m_Color: {r: 1, g: 0.89, b: 0.76, a: 1}
-  m_Intensity: 0.68
+  m_Intensity: 0.52
   m_Range: 4
   m_SpotAngle: 108
   m_InnerSpotAngle: 51.84
@@ -3187,7 +3187,7 @@ Light:
   serializedVersion: 12
   m_Type: 3
   m_Color: {r: 0.92, g: 0.96, b: 1, a: 1}
-  m_Intensity: 0.5
+  m_Intensity: 0.3
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -3506,7 +3506,7 @@ Light:
   serializedVersion: 12
   m_Type: 2
   m_Color: {r: 0.98, g: 0.95, b: 0.89, a: 1}
-  m_Intensity: 0.09
+  m_Intensity: 0.04
   m_Range: 4.5
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -3723,7 +3723,7 @@ Light:
   serializedVersion: 12
   m_Type: 2
   m_Color: {r: 0.98, g: 0.95, b: 0.89, a: 1}
-  m_Intensity: 0.09
+  m_Intensity: 0.04
   m_Range: 4.8
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -3850,18 +3850,18 @@ Light:
   serializedVersion: 12
   m_Type: 2
   m_Color: {r: 0.87, g: 0.93, b: 1, a: 1}
-  m_Intensity: 1.55
+  m_Intensity: 0.7
   m_Range: 13
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
   m_CookieSize2D: {x: 0.5, y: 0.5}
   m_Shadows:
-    m_Type: 0
+    m_Type: 2
     m_Resolution: -1
     m_CustomResolution: -1
     m_Strength: 1
-    m_Bias: 0.05
-    m_NormalBias: 0.4
+    m_Bias: 0.025
+    m_NormalBias: 0.12
     m_NearPlane: 0.2
     m_CullingMatrixOverride:
       e00: 1
@@ -3892,14 +3892,14 @@ Light:
   m_Lightmapping: 1
   m_LightShadowCasterMode: 0
   m_AreaSize: {x: 1, y: 1}
-  m_BounceIntensity: 1
+  m_BounceIntensity: 0.75
   m_ColorTemperature: 6570
   m_UseColorTemperature: 0
   m_BoundingSphereOverride: {x: 0, y: 0, z: 0, w: 0}
   m_UseBoundingSphereOverride: 0
   m_UseViewFrustumForShadowCasterCull: 1
   m_ForceVisible: 0
-  m_ShadowRadius: 0
+  m_ShadowRadius: 0.65
   m_ShadowAngle: 0
   m_LightUnit: 1
   m_LuxAtDistance: 1
@@ -3917,7 +3917,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
-  m_AdditionalLightsShadowResolutionTier: 2
+  m_AdditionalLightsShadowResolutionTier: 1
   m_CustomShadowLayers: 0
   m_LightCookieSize: {x: 1, y: 1}
   m_LightCookieOffset: {x: 0, y: 0}
@@ -4284,7 +4284,7 @@ Light:
   serializedVersion: 12
   m_Type: 2
   m_Color: {r: 0.98, g: 0.95, b: 0.89, a: 1}
-  m_Intensity: 0.09
+  m_Intensity: 0.04
   m_Range: 3.7
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
