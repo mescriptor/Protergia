@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.AssetImporters;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -14,6 +15,7 @@ namespace ReferenceHouseTools
     public static class ReferenceHouseTrees
     {
         const string Root = "Assets/ReferenceHouse/Vegetation";
+        internal const string ModelFolder = Root + "/Models/";
         const string ScenePath = "Assets/ReferenceHouse/Scenes/ReferenceHouse.unity";
         const string Output = "Blender/MediterraneanTrees";
         const string GroupName = "Trees | ready to place";
@@ -35,24 +37,24 @@ namespace ReferenceHouseTools
                 AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                 var palette=JsonUtility.FromJson<Palette>(File.ReadAllText(Root+"/tree_materials.json"));
                 var materials=new Dictionary<string,Material>();
+                var windShader = AssetDatabase.LoadAssetAtPath<Shader>(ReferenceHouseImporter.FoliageShaderPath);
                 foreach(var entry in palette.materials)
                 {
                     string path=Root+"/Materials/"+entry.name+".mat";
                     var mat=AssetDatabase.LoadAssetAtPath<Material>(path);
-                    if(!mat) {mat=new Material(Shader.Find("Universal Render Pipeline/Lit"));AssetDatabase.CreateAsset(mat,path);}
+                    if(!mat) {mat=new Material(windShader);AssetDatabase.CreateAsset(mat,path);}
+                    ApplyWind(mat, windShader, entry.name.StartsWith("Olive_", StringComparison.Ordinal));
                     mat.name=entry.name;
                     var c=entry.linearColor;
                     mat.SetColor("_BaseColor",new Color(c[0],c[1],c[2],1).gamma);
                     mat.SetFloat("_Smoothness",.15f);
                     mat.SetFloat("_Metallic",0);
-                    // Each leaf has a green front and explicit silver back geometry.
-                    mat.SetFloat("_Cull",(float)CullMode.Back);
                     EditorUtility.SetDirty(mat);materials.Add(entry.name,mat);
                 }
                 var prefabs=new List<GameObject>();
                 foreach(string name in new[]{"Olive","ItalianCypress"})
                 {
-                    string modelPath=Root+"/Models/"+name+".fbx";
+                    string modelPath=ModelFolder+name+".fbx";
                     var importer=(ModelImporter)AssetImporter.GetAtPath(modelPath);
                     importer.importCameras=false;importer.importLights=false;importer.importAnimation=false;
                     importer.importNormals=ModelImporterNormals.Import;
@@ -127,6 +129,16 @@ namespace ReferenceHouseTools
             catch(Exception e){Debug.LogException(e);if(Application.isBatchMode)EditorApplication.Exit(1);}
         }
 
+        internal static void ApplyWind(Material material, Shader shader, bool olive)
+        {
+            // Every LOD has leaves and branches in a single mesh. Both bend together.
+            material.shader = shader;
+            // Olive leaves include explicit green fronts and silver backs.
+            material.SetFloat("_Cull", (float)CullMode.Back);
+            material.SetFloat("_WindMaskMode", 0);
+            material.SetFloat("_WindResponse", olive ? .11f : .085f);
+        }
+
         static void SetupPreview(List<GameObject> prefabs)
         {
             // Studio objects exist only after the authored scene was saved and verified.
@@ -192,6 +204,23 @@ namespace ReferenceHouseTools
                 if(Application.isBatchMode)EditorApplication.Exit(1);
                 else EditorSceneManager.OpenScene(ScenePath);
             }
+        }
+    }
+
+    // The FBXs can also be placed directly, using their embedded materials.
+    sealed class MediterraneanTreeMaterialImporter : AssetPostprocessor
+    {
+        public override uint GetVersion() => 1;
+
+        void OnPreprocessMaterialDescription(MaterialDescription description, Material material, AnimationClip[] clips)
+        {
+            bool olive = assetPath == ReferenceHouseTrees.ModelFolder + "Olive.fbx";
+            if (!olive && assetPath != ReferenceHouseTrees.ModelFolder + "ItalianCypress.fbx")
+                return;
+
+            context.DependsOnArtifact(ReferenceHouseImporter.FoliageShaderPath);
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(ReferenceHouseImporter.FoliageShaderPath);
+            ReferenceHouseTrees.ApplyWind(material, shader, olive);
         }
     }
 }

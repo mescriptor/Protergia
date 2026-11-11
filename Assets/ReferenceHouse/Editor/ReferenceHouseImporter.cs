@@ -20,6 +20,7 @@ namespace ReferenceHouseTools
     public static class ReferenceHouseImporter
     {
         const string Root="Assets/ReferenceHouse";
+        internal const string FoliageShaderPath = Root + "/Settings/FoliageWind.shader";
         const string Export="C:/Protergia/Blender/ReferenceHouse/UnityExport";
         const string ScenePath=Root+"/Scenes/ReferenceHouse.unity";
         static readonly string Output="C:/Protergia/Blender/ReferenceHouse";
@@ -70,6 +71,8 @@ namespace ReferenceHouseTools
                     }
                     string assetPath=Root+"/Meshes/"+i.ToString("D5")+"_"+Safe(entry.name)+".asset";
                     var mesh=ReadMesh(Path.Combine(modelDirectory,entry.file),entry.name);
+                    if (entry.materials.Any(n => n.StartsWith("Foliage / grass ", StringComparison.Ordinal)))
+                        ReferenceHouseGrassWind.SetBladeWeights(mesh);
                     triangleCount+=mesh.triangles.Length/3;
                     mesh=SaveOrUpdate(mesh,assetPath);
                     var go=new GameObject(entry.name);go.transform.parent=group;go.transform.localPosition=V(entry.position);
@@ -124,7 +127,8 @@ namespace ReferenceHouseTools
 
         static Material MakeMaterial(HouseMaterial m)
         {
-            var mat=new Material(Shader.Find("Universal Render Pipeline/Lit"));mat.name=m.name;
+            var mat = CreateSurfaceMaterial(m.name);
+            mat.name=m.name;
             var baseCol=C(m.baseColor,Color.gray);baseCol.a=m.alpha>0?m.alpha:baseCol.a;
             // Blender's shader colors are linear; Unity serializes material Color properties in sRGB.
             Color srgb=baseCol.gamma;srgb.a=baseCol.a;mat.SetColor("_BaseColor",srgb);
@@ -159,6 +163,34 @@ namespace ReferenceHouseTools
             }
             mat.enableInstancing=true;
             return SaveOrUpdate(mat,Root+"/Materials/"+Safe(m.name)+".mat");
+        }
+
+        static Material CreateSurfaceMaterial(string name)
+        {
+            if (!name.StartsWith("Foliage / ", StringComparison.Ordinal) &&
+                !name.StartsWith("Mass / foliage ", StringComparison.Ordinal))
+                return new Material(Shader.Find("Universal Render Pipeline/Lit"));
+
+            var mat = new Material(AssetDatabase.LoadAssetAtPath<Shader>(FoliageShaderPath));
+            float response = .035f;
+            int maskMode = 2;
+            if (name.StartsWith("Foliage / grass ", StringComparison.Ordinal))
+            {
+                response = .075f;
+                maskMode = 3;
+            }
+            else if (name.StartsWith("Foliage / cypress ", StringComparison.Ordinal))
+            {
+                response = .055f;
+                maskMode = 0;
+            }
+            else if (name.StartsWith("Foliage / olive ", StringComparison.Ordinal))
+            {
+                response = .055f;
+            }
+            mat.SetFloat("_WindResponse", response);
+            mat.SetFloat("_WindMaskMode", maskMode);
+            return mat;
         }
 
         static Texture2D ImportTexture(string path,bool normal)
