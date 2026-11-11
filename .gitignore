@@ -123,3 +123,4 @@ Thumbs.db
 # Keep Blender sources, exports, snapshots, and the duplicate staging project local.
 /Blender/
 /Tools/UnityBuild/
+/.car-window-work
