@@ -8112,6 +8112,10 @@ PrefabInstance:
       propertyPath: m_StaticEditorFlags
       value: 69
       objectReference: {fileID: 0}
+    - target: {fileID: 3229657426194565918, guid: 79ded69d6a36fb545b43d8c6ded9d7e6, type: 3}
+      propertyPath: 'm_DirectAudioMutes.Array.data[0]'
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 3236088187310046644, guid: 79ded69d6a36fb545b43d8c6ded9d7e6, type: 3}
       propertyPath: m_StaticEditorFlags
       value: 69
@@ -9087,6 +9091,22 @@ PrefabInstance:
     - target: {fileID: 5999684851171870065, guid: 79ded69d6a36fb545b43d8c6ded9d7e6, type: 3}
       propertyPath: m_LocalPosition.x
       value: -0.051500022
+      objectReference: {fileID: 0}
+    - target: {fileID: 6028070988155786242, guid: 79ded69d6a36fb545b43d8c6ded9d7e6, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.9993046
+      objectReference: {fileID: 0}
+    - target: {fileID: 6028070988155786242, guid: 79ded69d6a36fb545b43d8c6ded9d7e6, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.6103343
+      objectReference: {fileID: 0}
+    - target: {fileID: 6028070988155786242, guid: 79ded69d6a36fb545b43d8c6ded9d7e6, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -3.1846
+      objectReference: {fileID: 0}
+    - target: {fileID: 6028070988155786242, guid: 79ded69d6a36fb545b43d8c6ded9d7e6, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 1.7453
       objectReference: {fileID: 0}
     - target: {fileID: 6039617188229964484, guid: 79ded69d6a36fb545b43d8c6ded9d7e6, type: 3}
       propertyPath: m_LocalPosition.y
