@@ -1,0 +1,1 @@
+Scene saved. Canvas: 1872x1560. Samples: 24, 36, 48 px. Target: PV module 05 cells tone 0

@@ -1,0 +1,10 @@
+{
+  "cards": 486,
+  "bend_factor": 1.45,
+  "previous_max_bend": 0.028443420906637373,
+  "new_max_bend": 0.04124296031462418,
+  "max_center_change": 4.585973723508303e-16,
+  "max_normal_dot_error": 1.1102230246251565e-15,
+  "camera_alignment": false,
+  "packed_images": true
+}

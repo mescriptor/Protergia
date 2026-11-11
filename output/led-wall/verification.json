@@ -1,0 +1,52 @@
+{
+    "width": 1872,
+    "height": 1560,
+    "playing": true,
+    "canvasScale": 1.0,
+    "targetName": "PV module 05 cells tone 0",
+    "labelPosition": {
+        "x": 711.153076171875,
+        "y": 1280.3304443359375
+    },
+    "samples": [
+        {
+            "fontSize": 24,
+            "bestFit": false,
+            "box": {
+                "x": 512.0,
+                "y": 130.0
+            },
+            "preferred": {
+                "x": 203.0,
+                "y": 57.0
+            },
+            "missingCharacters": ""
+        },
+        {
+            "fontSize": 36,
+            "bestFit": false,
+            "box": {
+                "x": 512.0,
+                "y": 130.0
+            },
+            "preferred": {
+                "x": 309.0,
+                "y": 85.0
+            },
+            "missingCharacters": ""
+        },
+        {
+            "fontSize": 48,
+            "bestFit": false,
+            "box": {
+                "x": 512.0,
+                "y": 130.0
+            },
+            "preferred": {
+                "x": 415.0,
+                "y": 112.0
+            },
+            "missingCharacters": ""
+        }
+    ]
+}
