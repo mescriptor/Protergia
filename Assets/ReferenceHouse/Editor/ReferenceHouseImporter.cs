@@ -85,6 +85,8 @@ namespace ReferenceHouseTools
                     GameObjectUtility.SetStaticEditorFlags(go,StaticEditorFlags.BatchingStatic|StaticEditorFlags.ReflectionProbeStatic);
                     if(entry.collection.StartsWith("01_") || entry.collection.StartsWith("02_") || entry.collection.StartsWith("03_") || entry.collection.StartsWith("05_"))
                         go.AddComponent<MeshCollider>().sharedMesh=mesh;
+                    if (entry.name == "Living / TV mass")
+                        AttachTelevisionScreen(go.transform, mesh.bounds);
                 }
                 PrefabUtility.SaveAsPrefabAssetAndConnect(house,Root+"/Prefabs/ReferenceHouse.prefab",InteractionMode.AutomatedAction);
                 CreateEnvironment();
@@ -163,6 +165,17 @@ namespace ReferenceHouseTools
             }
             mat.enableInstancing=true;
             return SaveOrUpdate(mat,Root+"/Materials/"+Safe(m.name)+".mat");
+        }
+
+        static void AttachTelevisionScreen(Transform television, Bounds bounds)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(Root + "/Prefabs/SKY express screen.prefab");
+            var screen = (GameObject)PrefabUtility.InstantiatePrefab(prefab, television);
+            // The imported mesh has an offset pivot and its viewing face points toward -Z.
+            screen.transform.localPosition = new Vector3(bounds.center.x, bounds.center.y, bounds.min.z - .001f);
+            float width = bounds.size.x - .024f;
+            screen.transform.localScale = new Vector3(width, width * 9f / 16f, 1f);
+            PrefabUtility.RecordPrefabInstancePropertyModifications(screen.transform);
         }
 
         static Material CreateSurfaceMaterial(string name)
