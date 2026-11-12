@@ -16,7 +16,11 @@ Unity project with the Reference House scene.
 
 The local `Blender` folder and duplicate `Tools/UnityBuild` project are excluded from Git, along with Unity caches, local editor settings, logs, generated solution files, and automatic Blender backups. Unity recreates its caches when the project is opened. Keep Unity `.meta` files together with their assets.
 
-## LED wall preview
+## Live LED wall output
+
+Open the Reference House scene and choose **Reference House > LED Wall > Play live 16x9 (1920x1080)**. Unity renders the house, video and enabled LED panels together at the wall's native **1872 × 1560**, then stretches the entire frame to **1920 × 1080**. The Windows player uses this feed in fullscreen. Set the LED processor to map the entire 16:9 input edge to edge across the 1872 × 1560 wall. A circle looks wide on the operator's monitor and round on the wall.
+
+## Native LED wall preview
 
 Open the Reference House scene and choose **Reference House > LED Wall > Set up 1872x1560 and Play**. This saves an editable Canvas in the scene, selects a fixed **1872 × 1560** Game view, and enters Play. The photovoltaic label follows its scene object; the three lower panels show the same sample at **24, 36, and 48 px**, with automatic font resizing disabled. At the target resolution, the Canvas scale is 1:1.
 

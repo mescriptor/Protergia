@@ -41,6 +41,7 @@ namespace ReferenceHouseTools
             try
             {
                 if (command == "setup") SetupAndPlay();
+                else if (command == "play-live") PlayLive();
                 else if (command == "capture") Capture();
                 else if (command == "stop") EditorApplication.isPlaying = false;
             }
@@ -116,10 +117,10 @@ namespace ReferenceHouseTools
                 sample.lineSpacing = 1.08f;
             }
 
-            PlayerSettings.defaultScreenWidth = 1872;
-            PlayerSettings.defaultScreenHeight = 1560;
-            PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
-            PlayerSettings.runInBackground = true;
+            if (!camera.TryGetComponent<ReferenceHouseLedOutput>(out var output))
+                output = Undo.AddComponent<ReferenceHouseLedOutput>(camera.gameObject);
+            Undo.RecordObject(output, "Assign LED wall canvas");
+            output.wallCanvas = canvas;
             ConfigureGameView();
             EditorSceneManager.MarkSceneDirty(root.scene);
             EditorSceneManager.SaveScene(root.scene);
@@ -170,6 +171,20 @@ namespace ReferenceHouseTools
         [MenuItem("Reference House/LED Wall/Use 1872x1560 Game view")]
         public static void ConfigureGameView()
         {
+            SelectGameViewSize(ReferenceHouseLedWall.Width, ReferenceHouseLedWall.Height, "LED Wall");
+        }
+
+        [MenuItem("Reference House/LED Wall/Play live 16x9 (1920x1080)")]
+        public static void PlayLive()
+        {
+            if (SceneManager.GetActiveScene().path != ScenePath)
+                throw new InvalidOperationException("Open the ReferenceHouse scene to play its LED output.");
+            SelectGameViewSize(ReferenceHouseLedOutput.OutputWidth, ReferenceHouseLedOutput.OutputHeight, "LED Wall Live");
+            if (!EditorApplication.isPlayingOrWillChangePlaymode) EditorApplication.isPlaying = true;
+        }
+
+        static void SelectGameViewSize(int width, int height, string title)
+        {
             // Unity does not expose custom Game view sizes as a public editor API.
             var assembly = typeof(Editor).Assembly;
             var sizesType = assembly.GetType("UnityEditor.GameViewSizes", true);
@@ -182,12 +197,12 @@ namespace ReferenceHouseTools
             {
                 var size = groupType.GetMethod("GetGameViewSize").Invoke(group, new object[] {i});
                 var type = size.GetType();
-                if ((int)type.GetProperty("width").GetValue(size) == 1872 && (int)type.GetProperty("height").GetValue(size) == 1560 && type.GetProperty("sizeType").GetValue(size).ToString() == "FixedResolution") { index = i; break; }
+                if ((int)type.GetProperty("width").GetValue(size) == width && (int)type.GetProperty("height").GetValue(size) == height && type.GetProperty("sizeType").GetValue(size).ToString() == "FixedResolution") { index = i; break; }
             }
             if (index < 0)
             {
                 var sizeType = assembly.GetType("UnityEditor.GameViewSizeType", true);
-                var size = Activator.CreateInstance(assembly.GetType("UnityEditor.GameViewSize", true), Enum.Parse(sizeType, "FixedResolution"), 1872, 1560, "LED Wall");
+                var size = Activator.CreateInstance(assembly.GetType("UnityEditor.GameViewSize", true), Enum.Parse(sizeType, "FixedResolution"), width, height, title);
                 groupType.GetMethod("AddCustomSize").Invoke(group, new[] {size});
                 index = count;
                 sizesType.GetMethod("SaveToHDD").Invoke(sizes, null);

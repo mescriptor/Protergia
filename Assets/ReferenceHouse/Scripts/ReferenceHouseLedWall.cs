@@ -19,15 +19,6 @@ namespace ReferenceHouseTools
         public RectTransform label, connector, marker;
         public Vector2 labelOffset = new Vector2(-230, 100);
 
-        void Awake()
-        {
-            if (!Application.isPlaying) return;
-            Application.runInBackground = true;
-#if !UNITY_EDITOR
-            Screen.SetResolution(Width, Height, FullScreenMode.Windowed);
-#endif
-        }
-
         void LateUpdate()
         {
             if (!sceneCamera || !target || !canvas || !label || !connector || !marker) return;
