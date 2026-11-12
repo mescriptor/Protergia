@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -7,6 +8,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Hotspot = ReferenceHouseTools.ReferenceHouseDiagram.Hotspot;
 
 namespace ReferenceHouseTools
 {
@@ -16,13 +18,9 @@ namespace ReferenceHouseTools
         const string ScenePath = "Assets/ReferenceHouse/Scenes/ReferenceHouse.unity";
         const string CanvasName = "LED Wall | Canvas 1872x1560";
         const string Output = "output/led-wall";
+        const string UI = "Assets/ReferenceHouse/UI/";
         const string CapturePending = "ReferenceHouse.LED.CapturePending";
-        static readonly Color Purple = new Color32(83, 0, 156, 255);
-        static readonly Color Lavender = new Color32(224, 178, 255, 255);
-        static readonly Color Orange = new Color32(255, 165, 0, 255);
         static double nextPoll;
-        static Font font;
-        static Sprite rounded;
 
         static ReferenceHouseLedWallSetup()
         {
@@ -43,6 +41,7 @@ namespace ReferenceHouseTools
                 if (command == "setup") SetupAndPlay();
                 else if (command == "play-live") PlayLive();
                 else if (command == "capture") Capture();
+                else if (command == "review-live") ReviewLive();
                 else if (command == "stop") EditorApplication.isPlaying = false;
             }
             catch (Exception ex)
@@ -55,117 +54,154 @@ namespace ReferenceHouseTools
         [MenuItem("Reference House/LED Wall/Set up 1872x1560 and Play")]
         public static void SetupAndPlay()
         {
-            if (EditorApplication.isPlayingOrWillChangePlaymode) throw new InvalidOperationException("Exit Play before setting up the LED wall.");
-            Directory.CreateDirectory(Output);
+            SaveDiagram();
+            ConfigureGameView();
+            SessionState.SetBool(CapturePending, true);
+            EditorApplication.isPlaying = true;
+        }
+
+        public static void SaveDiagram()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode) throw new InvalidOperationException("Exit Play before rebuilding the diagram.");
             if (SceneManager.GetActiveScene().path != ScenePath)
             {
                 if (Enumerable.Range(0, SceneManager.sceneCount).Any(i => SceneManager.GetSceneAt(i).isDirty))
                     throw new InvalidOperationException("Save the open scene before switching to ReferenceHouse.");
                 EditorSceneManager.OpenScene(ScenePath);
             }
-            // Keep a recoverable copy before adding the persistent UI objects.
-            string backup = Path.Combine(Output, "ReferenceHouse_before_LED.unity");
-            if (!File.Exists(backup)) File.Copy(ScenePath, backup);
-            var old = GameObject.Find(CanvasName);
-            if (old) Undo.DestroyObjectImmediate(old);
+
+            var cardTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(UI + "MeterCard.png");
+            var bold = AssetDatabase.LoadAssetAtPath<Font>(UI + "SourceSans3-Bold.otf");
+            var regular = AssetDatabase.LoadAssetAtPath<Font>(UI + "SourceSans3-Regular.otf");
+            if (!cardTexture || !regular || !bold) throw new InvalidOperationException("Missing LED artwork or fonts.");
             var camera = Camera.main;
             if (!camera) throw new InvalidOperationException("Reference house camera is missing.");
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            rounded = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
-            var root = new GameObject(CanvasName, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(ReferenceHouseLedWall));
-            Undo.RegisterCreatedObjectUndo(root, "Add LED wall test canvas");
+            var root = GameObject.Find(CanvasName);
+            if (!root)
+            {
+                root = new GameObject(CanvasName, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
+                Undo.RegisterCreatedObjectUndo(root, "Create energy diagram");
+            }
+            for (int i = root.transform.childCount - 1; i >= 0; --i)
+                Undo.DestroyObjectImmediate(root.transform.GetChild(i).gameObject);
             root.layer = 5;
             var canvas = root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 100;
             canvas.pixelPerfect = true;
             var scaler = root.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1872, 1560);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.matchWidthOrHeight = .5f;
-            var controller = root.GetComponent<ReferenceHouseLedWall>();
-            controller.sceneCamera = camera;
-            controller.canvas = canvas;
+            // The output camera always draws the UI into a native 1872 x 1560 frame.
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            scaler.scaleFactor = 1f;
 
-            var header = Panel(root.transform, "Title", new Vector2(64, 1496), new Vector2(760, 76), Purple, new Vector2(0, 1));
-            Text(header, "Title text", "Ενεργειακή τομή κατοικίας", 40, Color.white, new Vector2(30, -12), new Vector2(700, 52));
-            var resolution = Panel(root.transform, "Resolution badge", new Vector2(1808, 1496), new Vector2(395, 66), Purple, Vector2.one);
-            Text(resolution, "Resolution text", "LED WALL · 1872 × 1560", 26, Color.white, new Vector2(24, -15), new Vector2(350, 36));
+            if (!root.TryGetComponent<ReferenceHouseHotspotInput>(out _))
+                Undo.AddComponent<ReferenceHouseHotspotInput>(root);
+            if (!root.TryGetComponent<ReferenceHouseLedWall>(out var wall))
+                wall = Undo.AddComponent<ReferenceHouseLedWall>(root);
+            Undo.RecordObject(wall, "Assign energy cards");
+            var diagram = Box(root.transform, "Energy paths and buttons", new Rect(0, 0, ReferenceHouseLedWall.Width, ReferenceHouseLedWall.Height));
+            diagram.gameObject.AddComponent<ReferenceHouseDiagram>().raycastTarget = false;
+            PutText(diagram, "Title", ReferenceHouseDiagram.Title, ReferenceHouseDiagram.TitleTextBounds,
+                bold, 20, Color.white, TextAnchor.MiddleCenter);
 
-            controller.connector = Panel(root.transform, "Object connector", Vector2.zero, new Vector2(100, 4), Orange, new Vector2(0, .5f), false);
-            controller.marker = Panel(root.transform, "Object marker", Vector2.zero, new Vector2(16, 16), Orange, new Vector2(.5f, .5f));
-            controller.label = Panel(root.transform, "Photovoltaic label", Vector2.zero, new Vector2(348, 70), Lavender, new Vector2(.5f, .5f));
-            Text(controller.label, "Object text", "Φωτοβολταϊκά", 36, Purple, new Vector2(22, -12), new Vector2(304, 48));
-            var target = UnityEngine.Object.FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None)
-                .Where(r => r.gameObject.scene == root.scene && r.name.StartsWith("PV module 05") && r.name.Contains("cells"))
-                .OrderBy(r => r.name).FirstOrDefault();
-            if (!target)
-                target = UnityEngine.Object.FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None)
-                    .FirstOrDefault(r => r.gameObject.scene == root.scene && r.name.StartsWith("PV module 05"));
-            if (!target) throw new InvalidOperationException("Could not find the photovoltaic module to label.");
-            controller.target = target.transform;
-            controller.targetLocalPoint = target.transform.InverseTransformPoint(target.bounds.center);
+            var labels = ReferenceHouseDiagram.Labels;
+            foreach (var label in labels)
+                PutText(diagram, label.Id.ToString(), label.Text, label.TextBounds, bold, 20,
+                    ReferenceHouseDiagram.InkColor, TextAnchor.MiddleLeft);
 
-            int[] sizes = {24, 36, 48};
-            for (int i = 0; i < sizes.Length; i++)
+            wall.detailPanels = new GameObject[labels.Count];
+            for (int i = 0; i < labels.Count; ++i)
             {
-                var panel = Panel(root.transform, "Panel " + (i + 1) + " | " + sizes[i] + " px", new Vector2(64 + i * 592, 48), new Vector2(560, 230), Purple, Vector2.zero);
-                var strip = Panel(panel, "Orange accent", new Vector2(24, 212), new Vector2(64, 5), Orange, Vector2.zero, false);
-                Text(panel, "Size label", "0" + (i + 1) + "  /  " + sizes[i] + " px", 26, Lavender, new Vector2(24, -32), new Vector2(512, 36));
-                var sample = Text(panel, "Sample text", "Ενέργεια στο σπίτι\nAa Αα 0123456789", sizes[i], Color.white, new Vector2(24, -88), new Vector2(512, 130));
-                sample.lineSpacing = 1.08f;
+                var label = labels[i];
+                RectTransform panel;
+                if (label.Id == Hotspot.Meter)
+                {
+                    panel = Box(root.transform, "Μετρητής | Smart Meters", ReferenceHouseDiagram.MeterCardBounds);
+                    var image = panel.gameObject.AddComponent<RawImage>();
+                    image.texture = cardTexture;
+                    image.raycastTarget = false;
+                }
+                else
+                {
+                    const float width = 330, height = 166;
+                    panel = Box(root.transform, "Card | " + label.Id, Beside(label.HitBounds, width, height));
+                    var bg = panel.gameObject.AddComponent<ReferenceHouseDiagram>();
+                    bg.cardBackground = true;
+                    bg.raycastTarget = false;
+                    PutText(panel, "Heading", label.Text.Replace('\n', ' '), new Rect(14, 8, width - 28, 54),
+                        bold, 20, new Color32(73, 43, 136, 255), TextAnchor.MiddleLeft);
+                    PutText(panel, "Description", Description(label.Id), new Rect(14, 64, width - 28, height - 74),
+                        regular, 17.5f, new Color32(16, 15, 13, 255), TextAnchor.UpperLeft);
+                }
+                panel.gameObject.SetActive(false);
+                wall.detailPanels[i] = panel.gameObject;
             }
 
             if (!camera.TryGetComponent<ReferenceHouseLedOutput>(out var output))
                 output = Undo.AddComponent<ReferenceHouseLedOutput>(camera.gameObject);
             Undo.RecordObject(output, "Assign LED wall canvas");
             output.wallCanvas = canvas;
-            ConfigureGameView();
             EditorSceneManager.MarkSceneDirty(root.scene);
-            EditorSceneManager.SaveScene(root.scene);
-            AssetDatabase.SaveAssets();
+            if (!EditorSceneManager.SaveScene(root.scene)) throw new IOException("Could not save the reference house.");
             Selection.activeGameObject = root;
-            File.WriteAllText(Path.Combine(Output, "setup.txt"), "Scene saved. Canvas: 1872x1560. Samples: 24, 36, 48 px. Target: " + target.name);
-            SessionState.SetBool(CapturePending, true);
-            EditorApplication.isPlaying = true;
+            Debug.Log("ENERGY_DIAGRAM_SAVED");
         }
 
-        static RectTransform Panel(Transform parent, string name, Vector2 position, Vector2 size, Color color, Vector2 pivot, bool round = true)
+        static string Description(Hotspot id)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            go.layer = 5;
-            var rect = (RectTransform)go.transform;
-            rect.SetParent(parent, false);
-            rect.anchorMin = rect.anchorMax = Vector2.zero;
-            rect.pivot = pivot;
-            rect.anchoredPosition = position;
-            rect.sizeDelta = size;
-            var image = go.GetComponent<Image>();
-            image.color = color;
-            image.raycastTarget = false;
-            if (round && rounded) { image.sprite = rounded; image.type = Image.Type.Sliced; }
-            return rect;
+            switch (id)
+            {
+                case Hotspot.Photovoltaics: return "Τα πάνελ στη στέγη μετατρέπουν το φως του ήλιου σε ηλεκτρική ενέργεια για το σπίτι.";
+                case Hotspot.HeatPump: return "Η αντλία θερμότητας μεταφέρει θερμότητα από τον εξωτερικό αέρα στο σπίτι για τη θέρμανσή του.";
+                case Hotspot.Battery: return "Η μπαταρία αποθηκεύει ενέργεια από τα φωτοβολταϊκά για τις ώρες που το σπίτι τη χρειάζεται.";
+                case Hotspot.Charger: return "Ο φορτιστής τροφοδοτεί με ηλεκτρική ενέργεια την μπαταρία του αυτοκινήτου όσο είναι σταθμευμένο.";
+                default: throw new ArgumentOutOfRangeException(nameof(id));
+            }
         }
 
-        static Text Text(Transform parent, string name, string value, int size, Color color, Vector2 position, Vector2 box)
+        static Rect Beside(Rect button, float width, float height)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-            go.layer = 5;
+            foreach (var origin in new[] {
+                new Vector2(button.x, button.yMax + 8), new Vector2(button.x, button.y - height - 8),
+                new Vector2(button.xMax + 8, button.center.y - height / 2), new Vector2(button.x - width - 8, button.center.y - height / 2)})
+            {
+                var box = new Rect(Mathf.Clamp(origin.x, 12, ReferenceHouseLedWall.Width - width - 12),
+                    Mathf.Clamp(origin.y, 12, ReferenceHouseLedWall.Height - height - 12), width, height);
+                if (!ReferenceHouseDiagram.Labels.Any(label => box.Overlaps(label.HitBounds))) return box;
+            }
+            throw new InvalidOperationException("No clear space for the information card at " + button);
+        }
+
+        static RectTransform Box(Transform parent, string name, Rect area)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.layer = parent.gameObject.layer;
             var rect = (RectTransform)go.transform;
             rect.SetParent(parent, false);
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
-            rect.anchoredPosition = position;
-            rect.sizeDelta = box;
-            var text = go.GetComponent<Text>();
-            text.font = font; text.text = value; text.fontSize = size; text.color = color;
-            text.alignment = TextAnchor.UpperLeft;
+            rect.anchoredPosition = new Vector2(area.x, -area.y);
+            rect.sizeDelta = area.size;
+            return rect;
+        }
+
+        static void PutText(Transform parent, string name, string value, Rect area, Font font, float size, Color ink, TextAnchor alignment)
+        {
+            var rect = Box(parent, name, area);
+            // Legacy Text has integer sizes. 35 at half scale gives exactly 17.5 native pixels.
+            float density = size % 1 == 0 ? 1 : 2;
+            rect.localScale = Vector3.one / density;
+            rect.sizeDelta *= density;
+            var text = rect.gameObject.AddComponent<Text>();
+            text.font = font;
+            text.fontSize = Mathf.RoundToInt(size * density);
+            text.text = value;
+            text.alignment = alignment;
+            text.color = ink;
             text.resizeTextForBestFit = false;
             text.supportRichText = false;
-            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Truncate;
             text.raycastTarget = false;
-            return text;
         }
 
         [MenuItem("Reference House/LED Wall/Use 1872x1560 Game view")]
@@ -223,14 +259,105 @@ namespace ReferenceHouseTools
             EditorApplication.delayCall += Capture;
         }
 
-        [MenuItem("Reference House/LED Wall/Capture house and panels")]
+        [MenuItem("Reference House/LED Wall/Capture house and meter")]
         public static void Capture()
         {
-            if (!EditorApplication.isPlaying) throw new InvalidOperationException("Enter Play before capturing.");
             ConfigureGameView();
-            var controller = UnityEngine.Object.FindFirstObjectByType<ReferenceHouseLedWall>();
-            if (!controller) throw new InvalidOperationException("LED wall Canvas is missing.");
-            controller.CapturePair(Path.GetFullPath(Output));
+            StartReview(true);
+        }
+
+        [MenuItem("Reference House/LED Wall/Verify live 16x9 buttons")]
+        public static void ReviewLive()
+        {
+            SelectGameViewSize(ReferenceHouseLedOutput.OutputWidth, ReferenceHouseLedOutput.OutputHeight, "LED Wall Live");
+            StartReview(false);
+        }
+
+        static void StartReview(bool native)
+        {
+            if (!EditorApplication.isPlaying) throw new InvalidOperationException("Enter Play before capturing.");
+            var wall = UnityEngine.Object.FindFirstObjectByType<ReferenceHouseLedWall>();
+            if (!wall) throw new InvalidOperationException("LED wall Canvas is missing.");
+            wall.StartCoroutine(CaptureFrames(wall, native));
+        }
+
+        static IEnumerator CaptureFrames(ReferenceHouseLedWall wall, bool native)
+        {
+            Directory.CreateDirectory(Output);
+            for (int i = 0; i < 12; ++i) yield return null;
+            int w = native ? ReferenceHouseLedWall.Width : ReferenceHouseLedOutput.OutputWidth;
+            int h = native ? ReferenceHouseLedWall.Height : ReferenceHouseLedOutput.OutputHeight;
+            if (Screen.width != w || Screen.height != h) throw new InvalidOperationException($"Unexpected Game view: {Screen.width}x{Screen.height}.");
+            yield return ReferenceHouseHotspotReview.Verify(wall);
+            int previous = wall.SelectedIndex;
+            try
+            {
+                wall.CloseDetails();
+                if (native)
+                {
+                    yield return new WaitForEndOfFrame();
+                    SaveFrame("House_Energy_1872x1560.png");
+                }
+                wall.ActivateMeter();
+                Canvas.ForceUpdateCanvases();
+                yield return null;
+                yield return new WaitForEndOfFrame();
+                var panel = (RectTransform)wall.detailPanels[wall.SelectedIndex].transform;
+                var canvas = wall.GetComponent<Canvas>();
+                var corners = new Vector3[4];
+                panel.GetWorldCorners(corners);
+                var cam = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+                var min = RectTransformUtility.WorldToScreenPoint(cam, corners[0]);
+                var max = RectTransformUtility.WorldToScreenPoint(cam, corners[2]);
+                var expected = new Vector2(356, 672);
+                if (Vector2.Distance(max - min, expected) > .1f || Mathf.Abs(canvas.scaleFactor - 1f) > .001f)
+                    throw new InvalidOperationException($"Meter artwork scaled to {max - min} at canvas scale {canvas.scaleFactor}.");
+                SaveFrame(native ? "House_Meter_1872x1560.png" : "House_Meter_1920x1080.png");
+                string report = JsonUtility.ToJson(new ScaleReport {
+                    screenWidth = w, screenHeight = h, canvasScale = canvas.scaleFactor, nativeCardPixels = max - min,
+                    boldPixels = 20, regularPixels = 17.5f, clickVerificationPassed = true
+                }, true);
+                File.WriteAllText(Path.Combine(Output, native ? "meter-native.json" : "meter-live.json"), report);
+                Debug.Log("METER_CAPTURE_COMPLETE " + w + "x" + h);
+            }
+            finally
+            {
+                wall.CloseDetails();
+                if (previous >= 0) wall.ActivateHotspot(previous);
+            }
+        }
+
+        [Serializable] class ScaleReport
+        {
+            public int screenWidth, screenHeight;
+            public float canvasScale, boldPixels, regularPixels;
+            public Vector2 nativeCardPixels;
+            public bool clickVerificationPassed;
+        }
+
+        static void SaveFrame(string name)
+        {
+            var image = ScreenCapture.CaptureScreenshotAsTexture();
+            try
+            {
+                // Check the rendered frame too: an active UGUI object can still have no visible geometry.
+                var title = ReferenceHouseDiagram.TitleTextBounds;
+                var firstLabel = ReferenceHouseDiagram.Labels[0].TextBounds;
+                VerifyColor(image, title.xMin, title.center.y, ReferenceHouseDiagram.TitleColor);
+                VerifyColor(image, firstLabel.xMin - 4, firstLabel.center.y, ReferenceHouseDiagram.LabelColor);
+                File.WriteAllBytes(Path.Combine(Output, name), image.EncodeToPNG());
+            }
+            finally { UnityEngine.Object.Destroy(image); }
+        }
+
+        static void VerifyColor(Texture2D frame, float nativeX, float nativeY, Color32 expected)
+        {
+            int x = Mathf.RoundToInt(nativeX * frame.width / ReferenceHouseLedWall.Width);
+            int y = frame.height - 1 - Mathf.RoundToInt(nativeY * frame.height / ReferenceHouseLedWall.Height);
+            Color32 actual = frame.GetPixel(x, y);
+            if (Mathf.Max(Mathf.Abs(actual.r - expected.r), Mathf.Abs(actual.g - expected.g),
+                Mathf.Abs(actual.b - expected.b)) > 8)
+                throw new InvalidOperationException($"LED artwork at {x},{y} rendered {actual} instead of {expected}.");
         }
     }
 }

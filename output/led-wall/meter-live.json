@@ -1,0 +1,12 @@
+{
+    "screenWidth": 1920,
+    "screenHeight": 1080,
+    "canvasScale": 1.0,
+    "boldPixels": 20.0,
+    "regularPixels": 17.5,
+    "nativeCardPixels": {
+        "x": 355.9998779296875,
+        "y": 672.0000610351563
+    },
+    "clickVerificationPassed": true
+}

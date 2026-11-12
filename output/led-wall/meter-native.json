@@ -1,0 +1,12 @@
+{
+    "screenWidth": 1872,
+    "screenHeight": 1560,
+    "canvasScale": 1.0,
+    "boldPixels": 20.0,
+    "regularPixels": 17.5,
+    "nativeCardPixels": {
+        "x": 356.0,
+        "y": 672.0
+    },
+    "clickVerificationPassed": true
+}

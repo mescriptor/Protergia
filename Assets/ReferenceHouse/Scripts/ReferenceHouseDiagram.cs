@@ -1,0 +1,226 @@
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace ReferenceHouseTools
+{
+    // Positions are pixels from the top left of the native LED frame, calibrated to
+    // the fixed Reference House camera. Rendering and hit testing share this layout.
+    [RequireComponent(typeof(CanvasRenderer))]
+    public sealed class ReferenceHouseDiagram : MaskableGraphic
+    {
+        public enum Hotspot { Photovoltaics, HeatPump, Battery, Charger, Meter }
+
+        public readonly struct Label
+        {
+            public readonly Hotspot Id;
+            public readonly string Text;
+            public readonly Rect TextBounds, HitBounds;
+            internal readonly Rect Pill;
+            internal Vector2 Sun => new Vector2(Pill.xMin - 29, Pill.center.y);
+
+            internal Label(Hotspot id, string text, Rect pill, float hitLeft = 51)
+            {
+                Id = id;
+                Text = text;
+                Pill = pill;
+                TextBounds = new Rect(pill.x + 12, pill.y, pill.width - 24, pill.height);
+                HitBounds = Rect.MinMaxRect(pill.xMin - hitLeft, pill.center.y - Mathf.Max(24, pill.height / 2),
+                    pill.xMax, pill.center.y + Mathf.Max(24, pill.height / 2));
+            }
+        }
+
+        public const string Title = "Ενεργειακή τομή κατοικίας";
+        static readonly Rect TitlePill = new Rect(141, 66, 302, 58);
+        public static readonly Rect TitleTextBounds = new Rect(155, 66, 274, 58);
+        public static readonly Rect MeterCardBounds = new Rect(1252, 854, 356, 672);
+        public static readonly Color32 TitleColor = new Color32(0x50, 0x09, 0x83, 255);
+        public static readonly Color32 LabelColor = new Color32(0xE4, 0x98, 0xEF, 255);
+        public static readonly Color32 InkColor = TitleColor;
+        public static readonly Color32 LineColor = new Color32(0xE2, 0xAE, 0x62, 255);
+        public bool cardBackground;
+
+        public static IReadOnlyList<Label> Labels { get; } = new[]
+        {
+            new Label(Hotspot.Photovoltaics, "Φωτοβολταϊκά", new Rect(519, 245, 179, 45)),
+            new Label(Hotspot.HeatPump, "Αντλία θερμότητας", new Rect(138, 1173, 212, 46)),
+            new Label(Hotspot.Battery, "Μπαταρία αποθήκευσης\nενέργειας", new Rect(919, 1264, 267, 59)),
+            new Label(Hotspot.Charger, "Φορτιστής\nαυτοκινήτου", new Rect(1470, 784, 161, 57)),
+            new Label(Hotspot.Meter, "Μετρητής", new Rect(1133, 906, 110, 46), 90),
+        };
+
+        // Branches follow the roof edge, front slabs and basement equipment.
+        static readonly Vector2[][] CableRuns =
+        {
+            new[] { P(513, 375), P(389, 392), P(389, 1117), P(779, 1138), P(779, 1228) },
+            new[] { P(543, 1348), P(607, 1355), P(660, 1332), P(722, 1335) },
+            new[] { P(839, 1342), P(864, 1338), P(864, 950), P(1068, 929) },
+            new[] { P(864, 1148), P(1340, 1174), P(1399, 1138), P(1399, 989) }
+        };
+        static readonly Vector2[][] FloorLoops =
+        {
+            new[] { P(1319, 776), P(873, 767), P(873, 774), P(1319, 784) },
+            new[] { P(1318, 1164), P(874, 1136), P(874, 1143), P(1318, 1172) },
+        };
+
+        static Vector2 P(float x, float y) => new Vector2(x, y);
+        readonly List<Vector2> outline = new List<Vector2>(96);
+        readonly List<Vector2> centreLine = new List<Vector2>(72);
+        Vector2 topLeft, pixelScale;
+
+        protected override void Awake()
+        {
+            base.Awake();
+            useLegacyMeshGeneration = false;
+        }
+
+        protected override void OnPopulateMesh(VertexHelper vh)
+        {
+            vh.Clear();
+            Rect rect = rectTransform.rect;
+            topLeft = P(rect.xMin, rect.yMax);
+            if (cardBackground)
+            {
+                pixelScale = P(1, -1);
+                float radius = Mathf.Min(20, Mathf.Min(rect.width, rect.height) / 2);
+                RoundedRect(vh, new Rect(Vector2.zero, rect.size), radius, new Color32(0xFC, 0xEA, 0xC3, 255));
+                return;
+            }
+            pixelScale = P(rect.width / ReferenceHouseLedWall.Width, -rect.height / ReferenceHouseLedWall.Height);
+            foreach (var path in FloorLoops)
+                Stroke(vh, path, 3.5f, 5, new Color32(236, 151, 120, 255));
+            foreach (var path in CableRuns)
+            {
+                Stroke(vh, path, 11, 16, new Color32(235, 159, 55, 57));
+                Stroke(vh, path, 5, 16, LineColor);
+            }
+
+            // Leave the smart meter's original screen visible through the amber marker.
+            RoundedRect(vh, new Rect(1045, 899, 48, 60), 9, new Color32(255, 171, 42, 63));
+            RoundedRect(vh, new Rect(1049, 903, 40, 52), 6, new Color32(255, 174, 46, 100));
+            Sunburst(vh, P(99, 95), 26);
+            RoundedRect(vh, TitlePill, TitlePill.height / 2, TitleColor);
+            foreach (var label in Labels)
+            {
+                Sunburst(vh, label.Sun, 18);
+                RoundedRect(vh, label.Pill, label.Pill.height / 2, LabelColor);
+            }
+        }
+
+        void Sunburst(VertexHelper vh, Vector2 centre, float radius)
+        {
+            const int count = 14;
+            for (int i = 0; i < count; i++)
+            {
+                float angle = i * Mathf.PI * 2 / count;
+                var ray = P(Mathf.Cos(angle), Mathf.Sin(angle));
+                var dot = centre + ray * radius;
+                // Short, slightly elongated rays leave the house visible in the centre.
+                outline.Clear();
+                for (int j = 0; j < 12; j++)
+                {
+                    float t = j * Mathf.PI / 6;
+                    var tangent = P(-ray.y, ray.x);
+                    outline.Add(dot + ray * (Mathf.Cos(t) * radius * .154f)
+                                    + tangent * (Mathf.Sin(t) * radius * .095f));
+                }
+                ConvexFill(vh, dot, LineColor);
+            }
+        }
+
+        void RoundedRect(VertexHelper vh, Rect rect, float radius, Color32 fill)
+        {
+            outline.Clear();
+            Arc(P(rect.xMax - radius, rect.yMin + radius), radius, -90, 0);
+            Arc(P(rect.xMax - radius, rect.yMax - radius), radius, 0, 90);
+            Arc(P(rect.xMin + radius, rect.yMax - radius), radius, 90, 180);
+            Arc(P(rect.xMin + radius, rect.yMin + radius), radius, 180, 270);
+            ConvexFill(vh, rect.center, fill);
+        }
+
+        void Arc(Vector2 centre, float radius, float start, float end)
+        {
+            for (int step = 0; step <= 10; step++)
+            {
+                float a = Mathf.Lerp(start, end, step / 10f) * Mathf.Deg2Rad;
+                var next = centre + P(Mathf.Cos(a), Mathf.Sin(a)) * radius;
+                // Semicircular pill ends join two quarter circles at the same point.
+                if (outline.Count == 0 || (outline[outline.Count - 1] - next).sqrMagnitude > .0001f)
+                    outline.Add(next);
+            }
+        }
+
+        void ConvexFill(VertexHelper vh, Vector2 centre, Color32 fill)
+        {
+            int count = outline.Count;
+            int origin = Vertex(vh, centre, fill);
+            Color32 clear = fill;
+            clear.a = 0;
+            for (int i = 0; i < count; i++)
+            {
+                Vector2 curr = outline[i];
+                Vector2 prev = outline[(i + count - 1) % count], next = outline[(i + 1) % count];
+                Vector2 outside = RightNormal(((curr - prev).normalized + (next - curr).normalized).normalized);
+                Vertex(vh, curr, fill);
+                Vertex(vh, curr + outside, clear);
+            }
+            for (int i = 0; i < count; i++)
+            {
+                int curr = origin + 1 + i * 2, next = origin + 1 + ((i + 1) % count) * 2;
+                vh.AddTriangle(origin, curr, next);
+                Quad(vh, curr, curr + 1, next + 1, next);
+            }
+        }
+
+        // Sample rounded bends as a continuous ribbon. Transparent edge vertices
+        // antialias the wire even when the native canvas has multisampling disabled.
+        void Stroke(VertexHelper vh, Vector2[] path, float width, float bend, Color32 fill)
+        {
+            centreLine.Clear();
+            centreLine.Add(path[0]);
+            for (int i = 1; i < path.Length - 1; i++)
+            {
+                Vector2 corner = path[i], incoming = path[i - 1] - corner, outgoing = path[i + 1] - corner;
+                float inset = Mathf.Min(bend, Mathf.Min(incoming.magnitude, outgoing.magnitude) * .5f);
+                Vector2 entry = corner + incoming.normalized * inset, exit = corner + outgoing.normalized * inset;
+                for (int j = 0; j <= 8; j++)
+                {
+                    float t = j / 8f;
+                    centreLine.Add(Vector2.Lerp(Vector2.Lerp(entry, corner, t), Vector2.Lerp(corner, exit, t), t));
+                }
+            }
+            centreLine.Add(path[path.Length - 1]);
+            float half = width / 2;
+            Color32 clear = fill;
+            clear.a = 0;
+            for (int i = 0; i < centreLine.Count; i++)
+            {
+                Vector2 curr = centreLine[i], prev = centreLine[Mathf.Max(i - 1, 0)];
+                Vector2 next = centreLine[Mathf.Min(i + 1, centreLine.Count - 1)];
+                Vector2 offset = RightNormal(((curr - prev).normalized + (next - curr).normalized).normalized);
+                int row = Vertex(vh, curr + offset * (half + 1), clear);
+                Vertex(vh, curr + offset * half, fill);
+                Vertex(vh, curr - offset * half, fill);
+                Vertex(vh, curr - offset * (half + 1), clear);
+                if (i == 0) continue;
+                for (int col = 0; col < 3; col++)
+                    Quad(vh, row - 4 + col, row + col, row + col + 1, row - 3 + col);
+            }
+        }
+
+        static Vector2 RightNormal(Vector2 direction) => P(direction.y, -direction.x);
+
+        static void Quad(VertexHelper vh, int a, int b, int c, int d)
+        {
+            vh.AddTriangle(a, b, c);
+            vh.AddTriangle(a, c, d);
+        }
+
+        int Vertex(VertexHelper vh, Vector2 pixel, Color32 tint)
+        {
+            int index = vh.currentVertCount;
+            vh.AddVert(topLeft + Vector2.Scale(pixel, pixelScale), tint, Vector2.zero);
+            return index;
+        }
+    }
+}

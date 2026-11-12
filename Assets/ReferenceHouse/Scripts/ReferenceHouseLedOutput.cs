@@ -101,7 +101,9 @@ namespace ReferenceHouseTools
         {
             // URP draws this camera over the processed house frame, with a fresh depth buffer.
             uiCamera = CreateCamera("LED wall · native overlay", 1 << wallCanvas.gameObject.layer);
-            uiCamera.transform.position = new Vector3(0, -10000, 0);
+            // Behind the house camera, with x/y near zero so projected UI corners
+            // retain native pixel precision when the frame is stretched for output.
+            uiCamera.transform.position = new Vector3(0, 0, -100);
             uiCamera.targetTexture = nativeFrame;
             uiCamera.aspect = houseCamera.aspect;
             var data = uiCamera.GetUniversalAdditionalCameraData();
