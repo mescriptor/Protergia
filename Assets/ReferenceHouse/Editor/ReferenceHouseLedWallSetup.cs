@@ -42,6 +42,11 @@ namespace ReferenceHouseTools
                 else if (command == "play-live") PlayLive();
                 else if (command == "capture") Capture();
                 else if (command == "review-live") ReviewLive();
+                else if (command == "energy-setup") ReferenceHouseEnergyCornerSetup.Apply();
+                else if (command == "energy-verify") ReferenceHouseEnergyCornerVerification.StartVerification();
+                else if (command == "energy-build") ReferenceHouseEnergyCornerSetup.BuildWindows();
+                else if (command == "highlight-setup") ReferenceHouseObjectHighlightSetup.Apply();
+                else if (command == "highlight-verify") ReferenceHouseHighlightVerification.StartVerification();
                 else if (command == "stop") EditorApplication.isPlaying = false;
             }
             catch (Exception ex)
@@ -99,8 +104,12 @@ namespace ReferenceHouseTools
             if (!root.TryGetComponent<ReferenceHouseLedWall>(out var wall))
                 wall = Undo.AddComponent<ReferenceHouseLedWall>(root);
             Undo.RecordObject(wall, "Assign energy cards");
-            var diagram = Box(root.transform, "Energy paths and buttons", new Rect(0, 0, ReferenceHouseLedWall.Width, ReferenceHouseLedWall.Height));
-            diagram.gameObject.AddComponent<ReferenceHouseDiagram>().raycastTarget = false;
+            var interactive = Box(root.transform, "Interactive house", new Rect(0, 0, ReferenceHouseLedWall.Width, ReferenceHouseLedWall.Height));
+            var interactiveGroup = interactive.gameObject.AddComponent<CanvasGroup>();
+            var diagram = Box(interactive, "Energy paths and buttons", new Rect(0, 0, ReferenceHouseLedWall.Width, ReferenceHouseLedWall.Height));
+            var diagramGraphic = diagram.gameObject.AddComponent<ReferenceHouseDiagram>();
+            diagramGraphic.raycastTarget = false;
+            ReferenceHouseObjectHighlightSetup.Populate(diagramGraphic, camera);
             PutText(diagram, "Title", ReferenceHouseDiagram.Title, ReferenceHouseDiagram.TitleTextBounds,
                 bold, 20, Color.white, TextAnchor.MiddleCenter);
 
@@ -116,22 +125,14 @@ namespace ReferenceHouseTools
                 RectTransform panel;
                 if (label.Id == Hotspot.Meter)
                 {
-                    panel = Box(root.transform, "Μετρητής | Smart Meters", ReferenceHouseDiagram.MeterCardBounds);
+                    panel = Box(interactive, "Μετρητής | Smart Meters", ReferenceHouseDiagram.MeterCardBounds);
                     var image = panel.gameObject.AddComponent<RawImage>();
                     image.texture = cardTexture;
                     image.raycastTarget = false;
                 }
                 else
                 {
-                    const float width = 330, height = 166;
-                    panel = Box(root.transform, "Card | " + label.Id, Beside(label.HitBounds, width, height));
-                    var bg = panel.gameObject.AddComponent<ReferenceHouseDiagram>();
-                    bg.cardBackground = true;
-                    bg.raycastTarget = false;
-                    PutText(panel, "Heading", label.Text.Replace('\n', ' '), new Rect(14, 8, width - 28, 54),
-                        bold, 20, new Color32(73, 43, 136, 255), TextAnchor.MiddleLeft);
-                    PutText(panel, "Description", Description(label.Id), new Rect(14, 64, width - 28, height - 74),
-                        regular, 17.5f, new Color32(16, 15, 13, 255), TextAnchor.UpperLeft);
+                    panel = ReferenceHouseProductCards.Build(interactive, label, bold, regular);
                 }
                 panel.gameObject.SetActive(false);
                 wall.detailPanels[i] = panel.gameObject;
@@ -141,35 +142,12 @@ namespace ReferenceHouseTools
                 output = Undo.AddComponent<ReferenceHouseLedOutput>(camera.gameObject);
             Undo.RecordObject(output, "Assign LED wall canvas");
             output.wallCanvas = canvas;
+            ReferenceHouseEnergyCornerSetup.ConfigureScene(wall, interactiveGroup,
+                diagram.GetComponent<ReferenceHouseDiagram>(), bold, regular);
             EditorSceneManager.MarkSceneDirty(root.scene);
             if (!EditorSceneManager.SaveScene(root.scene)) throw new IOException("Could not save the reference house.");
             Selection.activeGameObject = root;
             Debug.Log("ENERGY_DIAGRAM_SAVED");
-        }
-
-        static string Description(Hotspot id)
-        {
-            switch (id)
-            {
-                case Hotspot.Photovoltaics: return "Τα πάνελ στη στέγη μετατρέπουν το φως του ήλιου σε ηλεκτρική ενέργεια για το σπίτι.";
-                case Hotspot.HeatPump: return "Η αντλία θερμότητας μεταφέρει θερμότητα από τον εξωτερικό αέρα στο σπίτι για τη θέρμανσή του.";
-                case Hotspot.Battery: return "Η μπαταρία αποθηκεύει ενέργεια από τα φωτοβολταϊκά για τις ώρες που το σπίτι τη χρειάζεται.";
-                case Hotspot.Charger: return "Ο φορτιστής τροφοδοτεί με ηλεκτρική ενέργεια την μπαταρία του αυτοκινήτου όσο είναι σταθμευμένο.";
-                default: throw new ArgumentOutOfRangeException(nameof(id));
-            }
-        }
-
-        static Rect Beside(Rect button, float width, float height)
-        {
-            foreach (var origin in new[] {
-                new Vector2(button.x, button.yMax + 8), new Vector2(button.x, button.y - height - 8),
-                new Vector2(button.xMax + 8, button.center.y - height / 2), new Vector2(button.x - width - 8, button.center.y - height / 2)})
-            {
-                var box = new Rect(Mathf.Clamp(origin.x, 12, ReferenceHouseLedWall.Width - width - 12),
-                    Mathf.Clamp(origin.y, 12, ReferenceHouseLedWall.Height - height - 12), width, height);
-                if (!ReferenceHouseDiagram.Labels.Any(label => box.Overlaps(label.HitBounds))) return box;
-            }
-            throw new InvalidOperationException("No clear space for the information card at " + button);
         }
 
         static RectTransform Box(Transform parent, string name, Rect area)
@@ -284,14 +262,20 @@ namespace ReferenceHouseTools
         static IEnumerator CaptureFrames(ReferenceHouseLedWall wall, bool native)
         {
             Directory.CreateDirectory(Output);
-            for (int i = 0; i < 12; ++i) yield return null;
-            int w = native ? ReferenceHouseLedWall.Width : ReferenceHouseLedOutput.OutputWidth;
-            int h = native ? ReferenceHouseLedWall.Height : ReferenceHouseLedOutput.OutputHeight;
-            if (Screen.width != w || Screen.height != h) throw new InvalidOperationException($"Unexpected Game view: {Screen.width}x{Screen.height}.");
-            yield return ReferenceHouseHotspotReview.Verify(wall);
+            var controller = UnityEngine.Object.FindFirstObjectByType<EnergyCorner.EnergyCornerController>();
+            var previousState = controller ? controller.State : EnergyCorner.CornerState.Interactive;
+            int previousProduct = controller ? controller.CurrentProduct : 0;
+            bool wasSimulating = controller && controller.IsSimulatingPresence;
+            bool previousPresence = controller && controller.Presence;
             int previous = wall.SelectedIndex;
             try
             {
+                if (controller) { controller.SetSimulatedPresence(true); controller.CloseProduct(); }
+                for (int i = 0; i < 12; ++i) yield return null;
+                int w = native ? ReferenceHouseLedWall.Width : ReferenceHouseLedOutput.OutputWidth;
+                int h = native ? ReferenceHouseLedWall.Height : ReferenceHouseLedOutput.OutputHeight;
+                if (Screen.width != w || Screen.height != h) throw new InvalidOperationException($"Unexpected Game view: {Screen.width}x{Screen.height}.");
+                yield return ReferenceHouseHotspotReview.Verify(wall);
                 wall.CloseDetails();
                 if (native)
                 {
@@ -324,6 +308,12 @@ namespace ReferenceHouseTools
             {
                 wall.CloseDetails();
                 if (previous >= 0) wall.ActivateHotspot(previous);
+                if (controller)
+                {
+                    if (wasSimulating) controller.SetSimulatedPresence(previousPresence);
+                    else controller.UseSensorPresence();
+                    controller.GoTo(previousState, previousProduct);
+                }
             }
         }
 

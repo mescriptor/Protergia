@@ -1,0 +1,37 @@
+{
+    "comPort": "auto",
+    "baudRate": 115200,
+
+    "buttonCount": 5,
+    "physicalButtonCount": 4,
+    "productNames": ["Smart Meter", "Heat Pump", "EV Charger", "PV Panels", "Battery"],
+
+    "idleTimeoutSec": 15,
+    "popupTimeoutSec": 30,
+    "buttonWakesFromAttract": true,
+
+    "enableHardwareOutputs": false,
+    "leds": {
+        "attract": "off",
+        "interactive": "all",
+        "product": "selected"
+    },
+    "floorOutput": {
+        "attract": false,
+        "interactive": false
+    },
+
+    "videoFolder": "Videos",
+    "videoFadeSec": 0.6,
+    "videoAudio": false,
+    "videoWidth": 1872,
+    "videoHeight": 1560,
+
+    "debugOverlay": false,
+    "keyboardInput": true,
+    "screenWidth": 0,
+    "screenHeight": 0,
+    "hideCursor": true,
+    "logMaxKB": 5120,
+    "logFilesToKeep": 5
+}

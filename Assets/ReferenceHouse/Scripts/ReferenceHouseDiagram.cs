@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -39,6 +40,36 @@ namespace ReferenceHouseTools
         public static readonly Color32 InkColor = TitleColor;
         public static readonly Color32 LineColor = new Color32(0xE2, 0xAE, 0x62, 255);
         public bool cardBackground;
+        int selectedIndex = -1;
+        public int SelectedIndex => selectedIndex;
+
+        [Serializable]
+        public sealed class EquipmentOutline
+        {
+            public Hotspot product;
+            public Vector2[] points;
+        }
+
+        // Projected from the actual equipment meshes using the scene's fixed LED-wall camera.
+        public EquipmentOutline[] equipmentOutlines = Array.Empty<EquipmentOutline>();
+        public Hotspot? HighlightedObject => selectedIndex >= 0 && selectedIndex < Labels.Count &&
+            HasObjectOutline(Labels[selectedIndex].Id) ? Labels[selectedIndex].Id : (Hotspot?)null;
+
+        public bool HasObjectOutline(Hotspot product)
+        {
+            if (equipmentOutlines == null) return false;
+            foreach (var shape in equipmentOutlines)
+                if (shape != null && shape.product == product && shape.points != null && shape.points.Length >= 3)
+                    return true;
+            return false;
+        }
+
+        public void SetSelected(int index)
+        {
+            if (selectedIndex == index) return;
+            selectedIndex = index;
+            SetVerticesDirty();
+        }
 
         public static IReadOnlyList<Label> Labels { get; } = new[]
         {
@@ -95,15 +126,36 @@ namespace ReferenceHouseTools
                 Stroke(vh, path, 5, 16, LineColor);
             }
 
-            // Leave the smart meter's original screen visible through the amber marker.
-            RoundedRect(vh, new Rect(1045, 899, 48, 60), 9, new Color32(255, 171, 42, 63));
-            RoundedRect(vh, new Rect(1049, 903, 40, 52), 6, new Color32(255, 174, 46, 100));
+            DrawEquipmentHighlight(vh);
             Sunburst(vh, P(99, 95), 26);
             RoundedRect(vh, TitlePill, TitlePill.height / 2, TitleColor);
-            foreach (var label in Labels)
+            for (int i = 0; i < Labels.Count; i++)
             {
+                var label = Labels[i];
                 Sunburst(vh, label.Sun, 18);
-                RoundedRect(vh, label.Pill, label.Pill.height / 2, LabelColor);
+                RoundedRect(vh, label.Pill, label.Pill.height / 2,
+                    i == selectedIndex ? new Color32(255, 222, 137, 255) : LabelColor);
+            }
+        }
+
+        void DrawEquipmentHighlight(VertexHelper vh)
+        {
+            var selected = HighlightedObject;
+            if (!selected.HasValue) return;
+            foreach (var shape in equipmentOutlines)
+            {
+                if (shape == null || shape.product != selected.Value || shape.points == null || shape.points.Length < 3)
+                    continue;
+                Vector2 centre = Vector2.zero;
+                outline.Clear();
+                foreach (var point in shape.points) { outline.Add(point); centre += point; }
+                ConvexFill(vh, centre / shape.points.Length, new Color32(255, 181, 35, 28));
+                var closed = new Vector2[shape.points.Length + 1];
+                Array.Copy(shape.points, closed, shape.points.Length);
+                closed[closed.Length - 1] = closed[0];
+                Stroke(vh, closed, 17, 3, new Color32(255, 160, 24, 32));
+                Stroke(vh, closed, 8, 3, new Color32(255, 171, 30, 100));
+                Stroke(vh, closed, 2.5f, 2, new Color32(255, 217, 94, 255));
             }
         }
 

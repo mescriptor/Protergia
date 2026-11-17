@@ -13,6 +13,7 @@ namespace ReferenceHouseTools
         InputAction press;
         InputControl pressedPointer;
         int pressedRegion = -1;
+        public Func<bool> CanInteract { get; set; }
 
         /// <summary>Hit regions use native wall pixels from the top left. Later entries are on top.</summary>
         public void Configure(Rect[] regions, Action<int> onClick)
@@ -53,6 +54,7 @@ namespace ReferenceHouseTools
 
         void OnPointer(InputAction.CallbackContext context)
         {
+            if (CanInteract != null && !CanInteract()) { CancelPress(); return; }
             if (regions == null || onClick == null) return;
             var control = (ButtonControl)context.control;
             var touch = control.parent as TouchControl;

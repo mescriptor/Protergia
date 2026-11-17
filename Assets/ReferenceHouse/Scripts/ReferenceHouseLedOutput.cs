@@ -25,7 +25,10 @@ namespace ReferenceHouseTools
         {
             Application.runInBackground = true;
 #if UNITY_STANDALONE && !UNITY_EDITOR
-            Screen.SetResolution(OutputWidth, OutputHeight, FullScreenMode.FullScreenWindow);
+            var cfg = EnergyCorner.EnergyCornerConfig.Current;
+            bool forced = cfg.screenWidth > 0 && cfg.screenHeight > 0;
+            Screen.SetResolution(forced ? cfg.screenWidth : OutputWidth,
+                forced ? cfg.screenHeight : OutputHeight, FullScreenMode.FullScreenWindow);
 #endif
         }
 

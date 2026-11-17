@@ -1,0 +1,74 @@
+{
+    "status": "passed",
+    "startedAtUtc": "2026-11-16T11:40:53.6911842Z",
+    "finishedAtUtc": "2026-11-16T11:41:03.9148212Z",
+    "error": "",
+    "screenWidth": 1872,
+    "screenHeight": 1560,
+    "keyboardBindingsVerified": true,
+    "renderedHighlightsVerified": true,
+    "checks": [
+        "Saved bridge has controller, cards and diagram references",
+        "Highlight captures use native 1872x1560 wall pixels",
+        "Projected outline exists for Meter",
+        "Projected outline exists for HeatPump",
+        "Projected outline exists for Charger",
+        "Projected outline exists for Photovoltaics",
+        "Projected outline exists for Battery",
+        "Presence reveals the house with no equipment highlighted",
+        "Unselected baseline frame is available",
+        "Key 1 selects only Meter",
+        "Meter gains visible amber outline pixels (619)",
+        "Key 2 selects only HeatPump",
+        "HeatPump gains visible amber outline pixels (3822)",
+        "Meter outline is cleared while HeatPump is selected (0 extra amber pixels)",
+        "Key 3 selects only Charger",
+        "Charger gains visible amber outline pixels (1103)",
+        "Meter outline is cleared while Charger is selected (0 extra amber pixels)",
+        "Key 4 selects only Photovoltaics",
+        "Photovoltaics gains visible amber outline pixels (8825)",
+        "Meter outline is cleared while Photovoltaics is selected (0 extra amber pixels)",
+        "Key 5 selects only Battery",
+        "Battery gains visible amber outline pixels (1991)",
+        "Meter outline is cleared while Battery is selected (0 extra amber pixels)",
+        "Pressing the same button closes its card and clears the object highlight",
+        "Closed cards leave Meter unhighlighted (0 extra amber pixels)",
+        "Closed cards leave HeatPump unhighlighted (0 extra amber pixels)",
+        "Closed cards leave Charger unhighlighted (0 extra amber pixels)",
+        "Closed cards leave Photovoltaics unhighlighted (0 extra amber pixels)",
+        "Closed cards leave Battery unhighlighted (0 extra amber pixels)",
+        "Escape clears the active object highlight",
+        "Returning to videos clears every object highlight"
+    ],
+    "screenshots": [
+        "output/energy-corner/Highlight_baseline_1872x1560.png",
+        "output/energy-corner/Highlight_1_Meter_1872x1560.png",
+        "output/energy-corner/Highlight_2_HeatPump_1872x1560.png",
+        "output/energy-corner/Highlight_3_Charger_1872x1560.png",
+        "output/energy-corner/Highlight_4_Photovoltaics_1872x1560.png",
+        "output/energy-corner/Highlight_5_Battery_1872x1560.png",
+        "output/energy-corner/Highlight_closed_1872x1560.png"
+    ],
+    "pixels": [
+        {
+            "product": "Meter",
+            "addedAmberPixels": 619
+        },
+        {
+            "product": "HeatPump",
+            "addedAmberPixels": 3822
+        },
+        {
+            "product": "Charger",
+            "addedAmberPixels": 1103
+        },
+        {
+            "product": "Photovoltaics",
+            "addedAmberPixels": 8825
+        },
+        {
+            "product": "Battery",
+            "addedAmberPixels": 1991
+        }
+    ]
+}
