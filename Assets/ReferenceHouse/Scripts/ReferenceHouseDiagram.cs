@@ -72,7 +72,7 @@ namespace ReferenceHouseTools
             selectedIndex = index;
             if (!cardBackground && index >= 0 && !EnergyFlow)
             {
-                var layer = new GameObject("Energy flow | panels to battery to equipment",
+                var layer = new GameObject("Energy flow effects",
                     typeof(RectTransform), typeof(CanvasRenderer), typeof(ReferenceHouseEnergyFlow));
                 layer.layer = gameObject.layer;
                 layer.transform.SetParent(transform, false);

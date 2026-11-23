@@ -6,11 +6,11 @@ using Hotspot = ReferenceHouseTools.ReferenceHouseDiagram.Hotspot;
 
 namespace ReferenceHouseTools
 {
-    /// <summary>Repeating trains of energy packets: PV, battery arrival, then the selected branch.</summary>
+    /// <summary>Draws sunlight on the panels or energy packets along the selected cable route.</summary>
     [RequireComponent(typeof(CanvasRenderer))]
     public sealed class ReferenceHouseEnergyFlow : MaskableGraphic
     {
-        public enum Stage { Off, PanelsToBattery, BatteryArrival, BatteryToEquipment, Arrival }
+        public enum Stage { Off, PanelsToBattery, BatteryArrival, BatteryToEquipment, Arrival, SunlightToPanels }
 
         const int PulseCount = 6;
         const float PulseInterval = .18f;
@@ -19,6 +19,17 @@ namespace ReferenceHouseTools
         const float BatteryPause = .18f;
         const float EndPause = .25f;
         const float ArrivalSeconds = .45f;
+        const float SunTravelSeconds = .78f;
+        const float SunRayInterval = .072f;
+        const float SunRayTail = .64f; // Fraction of the ray's length behind its leading edge.
+        const float SunGlowSeconds = .48f;
+        static readonly Vector2 SkyOffset = new Vector2(230, -234);
+        // Landing points sit on the exposed panel surfaces beside the open PV card.
+        static readonly Vector2[] SunTargets =
+        {
+            new Vector2(728, 300), new Vector2(810, 299), new Vector2(889, 296),
+            new Vector2(978, 299), new Vector2(1056, 344), new Vector2(1140, 293)
+        };
         static readonly Vector2 BatteryCentre = new Vector2(782, 1298);
         static readonly ReferenceHouseCablePath Solar = new ReferenceHouseCablePath(ReferenceHouseDiagram.CableRuns[0]);
         static readonly ReferenceHouseCablePath Meter = new ReferenceHouseCablePath(ReferenceHouseDiagram.CableRuns[2]);
@@ -37,15 +48,17 @@ namespace ReferenceHouseTools
         Vector2 topLeft, pixelScale;
 
         public Hotspot? SelectedProduct => selectedProduct;
-        public Hotspot? Destination => !selectedProduct.HasValue ? (Hotspot?)null :
+        bool ShowsSunlight => selectedProduct == Hotspot.Photovoltaics;
+        public Hotspot? Destination => !selectedProduct.HasValue || ShowsSunlight ? selectedProduct :
             delivery == null ? Hotspot.Battery : selectedProduct;
         public float SourceSeconds => Solar.Length / Speed;
         public float DeliveryStartSeconds => SourceSeconds + BatteryPause;
         public float DeliverySeconds => delivery == null ? 0 : delivery.Length / Speed;
         public float TrainSeconds => (PulseCount - 1) * PulseInterval;
         // Leave enough time for the last packet to arrive before restarting the train.
-        public float CycleSeconds => (delivery == null ? SourceSeconds : DeliveryStartSeconds + DeliverySeconds)
-            + TrainSeconds + ArrivalSeconds + EndPause;
+        public float CycleSeconds => ShowsSunlight
+            ? SunTravelSeconds + (SunTargets.Length - 1) * SunRayInterval + SunTravelSeconds * SunRayTail + .15f
+            : (delivery == null ? SourceSeconds : DeliveryStartSeconds + DeliverySeconds) + TrainSeconds + ArrivalSeconds + EndPause;
         public float ElapsedSeconds => (float)(Time.unscaledTimeAsDouble - startedAt);
         public float LoopSeconds => Mathf.Repeat(ElapsedSeconds, CycleSeconds);
         public Stage CurrentStage // Stage of the leading packet; following packets use the same route and delay.
@@ -53,6 +66,7 @@ namespace ReferenceHouseTools
             get
             {
                 if (!selectedProduct.HasValue) return Stage.Off;
+                if (ShowsSunlight) return Stage.SunlightToPanels;
                 float t = LoopSeconds;
                 if (t < SourceSeconds) return Stage.PanelsToBattery;
                 if (delivery == null) return Stage.Arrival;
@@ -92,6 +106,12 @@ namespace ReferenceHouseTools
             topLeft = new Vector2(rect.xMin, rect.yMax);
             pixelScale = new Vector2(rect.width / ReferenceHouseLedWall.Width, -rect.height / ReferenceHouseLedWall.Height);
             float t = LoopSeconds;
+            if (ShowsSunlight)
+            {
+                DrawSunlight(vh, t);
+                return;
+            }
+
             for (int i = 0; i < PulseCount; i++)
             {
                 float packetTime = t - i * PulseInterval;
@@ -102,6 +122,54 @@ namespace ReferenceHouseTools
                 float distance = (packetTime - DeliveryStartSeconds) * Speed;
                 Packet(vh, delivery, distance);
                 Arrival(vh, delivery.End, (distance - delivery.Length) / Speed);
+            }
+        }
+
+        void DrawSunlight(VertexHelper vh, float elapsed)
+        {
+            for (int i = 0; i < SunTargets.Length; i++)
+            {
+                Vector2 target = SunTargets[i];
+                float rayTime = elapsed - i * SunRayInterval;
+                float head = rayTime / SunTravelSeconds;
+                float from = Mathf.Max(0, head - SunRayTail), to = Mathf.Min(1, head);
+                if (to > from)
+                {
+                    SunRay(vh, target, from, to, head, 35, new Color32(255, 204, 102, 105));
+                    SunRay(vh, target, from, to, head, 12, new Color32(255, 249, 208, 245));
+                }
+
+                float contact = (rayTime - SunTravelSeconds) / SunGlowSeconds;
+                if (contact < 0 || contact >= 1) continue;
+                float strength = 1 - Mathf.SmoothStep(0, 1, contact);
+                Disc(vh, target, Mathf.Lerp(19, 26, contact), new Color32(255, 191, 64, (byte)(180 * strength)), .46f);
+                Disc(vh, target, 9, new Color32(255, 250, 215, (byte)(245 * strength)), .53f);
+            }
+        }
+
+        void SunRay(VertexHelper vh, Vector2 target, float from, float to, float head, float width, Color32 tint)
+        {
+            Vector2 normal = new Vector2(-SkyOffset.y, SkyOffset.x).normalized;
+            int steps = Mathf.Max(2, Mathf.CeilToInt((to - from) * 42));
+            for (int i = 0; i <= steps; i++)
+            {
+                float position = Mathf.Lerp(from, to, i / (float)steps);
+                float behind = head - position;
+                float strength = Mathf.SmoothStep(0, 1, Mathf.Clamp01((SunRayTail - behind) / .32f))
+                    * Mathf.SmoothStep(0, 1, Mathf.Clamp01(behind / .09f))
+                    * Mathf.SmoothStep(0, 1, Mathf.Clamp01(position / .15f));
+                Vector2 point = target + SkyOffset * (1 - position);
+                Vector2 spread = normal * (width * Mathf.Lerp(1, .48f, position));
+                Color32 centre = tint;
+                centre.a = (byte)(centre.a * strength);
+                Color32 edge = centre;
+                edge.a = 0;
+                int row = Vertex(vh, point - spread, edge);
+                Vertex(vh, point, centre);
+                Vertex(vh, point + spread, edge);
+                if (i == 0) continue;
+                Quad(vh, row - 3, row, row + 1, row - 2);
+                Quad(vh, row - 2, row + 1, row + 2, row - 1);
             }
         }
 
@@ -170,7 +238,7 @@ namespace ReferenceHouseTools
             }
         }
 
-        void Disc(VertexHelper vh, Vector2 point, float radius, Color32 tint)
+        void Disc(VertexHelper vh, Vector2 point, float radius, Color32 tint, float heightScale = 1)
         {
             int centre = Vertex(vh, point, tint);
             Color32 edge = tint;
@@ -178,7 +246,7 @@ namespace ReferenceHouseTools
             for (int i = 0; i <= 20; i++)
             {
                 float a = i * Mathf.PI / 10;
-                int next = Vertex(vh, point + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * radius, edge);
+                int next = Vertex(vh, point + new Vector2(Mathf.Cos(a), Mathf.Sin(a) * heightScale) * radius, edge);
                 if (i > 0) vh.AddTriangle(centre, next - 1, next);
             }
         }

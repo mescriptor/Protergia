@@ -149,6 +149,8 @@ namespace ReferenceHouseTools
             var cfg = EnergyCornerConfig.Current;
             float originalIdle = cfg.idleTimeoutSec, originalPopup = cfg.popupTimeoutSec, originalFade = cfg.videoFadeSec;
             bool originalKeyboard = cfg.keyboardInput;
+            var originalInputSettings = InputSystem.settings;
+            var testInputSettings = UnityEngine.Object.Instantiate(originalInputSettings);
             var originalState = controller.State;
             int originalProduct = controller.CurrentProduct;
             bool originalSimulation = controller.IsSimulatingPresence, originalPresence = controller.Presence;
@@ -160,6 +162,10 @@ namespace ReferenceHouseTools
             Color32[] baseline = null;
             try
             {
+                // Keep injected keyboard events in the Game view even when the editor is in the background.
+                testInputSettings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+                testInputSettings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+                InputSystem.settings = testInputSettings;
                 if (controller.serial) controller.serial.enabled = false;
                 if (bridge.debugOverlay) bridge.debugOverlay.SetVisible(false);
                 cfg.keyboardInput = true;
@@ -197,7 +203,10 @@ namespace ReferenceHouseTools
                             Require(staleMeter <= 3, "Meter outline is cleared while " + expected + " is selected (" + staleMeter + " extra amber pixels)");
                         }
                     });
-                    yield return VerifyFlow(diagram, expected, baseline, selectedBaseline);
+                    if (expected == Hotspot.Photovoltaics)
+                        yield return VerifySunlight(diagram.EnergyFlow, selectedBaseline);
+                    else
+                        yield return VerifyFlow(diagram, expected, baseline, selectedBaseline);
                 }
 
                 yield return Press(keyboard, Key.Digit5);
@@ -234,6 +243,8 @@ namespace ReferenceHouseTools
                 cfg.videoFadeSec = originalFade;
                 cfg.keyboardInput = originalKeyboard;
                 if (keyboard != null && keyboard.added) InputSystem.RemoveDevice(keyboard);
+                InputSystem.settings = originalInputSettings;
+                UnityEngine.Object.Destroy(testInputSettings);
                 if (previousKeyboard != null && previousKeyboard.added) previousKeyboard.MakeCurrent();
                 if (controller)
                 {
@@ -260,11 +271,29 @@ namespace ReferenceHouseTools
                 !flow || (!flow.enabled && !flow.SelectedProduct.HasValue), message + " (energy follows selection)");
         }
 
+        static IEnumerator VerifySunlight(ReferenceHouseEnergyFlow flow, Color32[] baseline)
+        {
+            Require(flow.CurrentStage == ReferenceHouseEnergyFlow.Stage.SunlightToPanels,
+                "Photovoltaics uses the incoming sunlight effect");
+            while (flow.ElapsedSeconds < .88f) yield return null;
+            yield return Capture("Flow_Photovoltaics_SunlightToPanels", frame =>
+            {
+                var pixels = frame.GetPixels32();
+                int rays = LightBands(baseline, pixels, new RectInt(780, 217, 500, 7), acrossSky: true);
+                Require(rays >= 4, "At least four separate sun rays are visible above the panels (" + rays + ")");
+                Require(AddedLight(baseline, pixels, new RectInt(716, 290, 113, 17), out _) >= 10,
+                    "The rays produce visible contact glows on the panel surfaces");
+                Require(LightBands(baseline, pixels, new RectInt(375, 430, 28, 680)) == 0 &&
+                    AddedLight(baseline, pixels, new RectInt(535, 1100, 265, 130), out _) == 0,
+                    "The photovoltaics card leaves the battery cable inactive");
+            });
+        }
+
         static IEnumerator VerifyFlow(ReferenceHouseDiagram diagram, Hotspot product, Color32[] baseline, Color32[] selectedBaseline)
         {
             var flow = diagram.EnergyFlow;
-            bool endsAtBattery = product == Hotspot.Photovoltaics || product == Hotspot.Battery;
-            Require(flow.Destination == (endsAtBattery ? Hotspot.Battery : product), product + " routes to the requested destination");
+            bool endsAtBattery = product == Hotspot.Battery;
+            Require(flow.Destination == product, product + " routes to the requested destination");
             Require(flow.CurrentStage == ReferenceHouseEnergyFlow.Stage.PanelsToBattery && flow.ElapsedSeconds < 1,
                 product + " restarts at the panels when selected");
             var source = new RectInt(530, 1100, 255, 65);
@@ -344,24 +373,27 @@ namespace ReferenceHouseTools
             }
         }
 
-        // Count separated illuminated bands in the vertical cable, independently of the pulse count in code.
-        static int LightBands(Color32[] baseline, Color32[] current, RectInt area)
+        // Count separated illuminated bands along the cable or across a slice of sky.
+        static int LightBands(Color32[] baseline, Color32[] current, RectInt area, bool acrossSky = false)
         {
-            int bands = 0, darkRows = 6;
-            for (int y = area.yMin; y < area.yMax; y++)
+            int bands = 0, darkSlices = 6;
+            int length = acrossSky ? area.width : area.height;
+            for (int i = 0; i < length; i++)
             {
-                bool lit = AddedLight(baseline, current, new RectInt(area.xMin, y, area.width, 1), out _) >= 2;
+                var slice = acrossSky ? new RectInt(area.xMin + i, area.yMin, 1, area.height) :
+                    new RectInt(area.xMin, area.yMin + i, area.width, 1);
+                bool lit = AddedLight(baseline, current, slice, out _, acrossSky) >= 2;
                 if (lit)
                 {
-                    if (darkRows >= 6) bands++;
-                    darkRows = 0;
+                    if (darkSlices >= 6) bands++;
+                    darkSlices = 0;
                 }
-                else darkRows++;
+                else darkSlices++;
             }
             return bands;
         }
 
-        static int AddedLight(Color32[] baseline, Color32[] current, RectInt area, out float centreX)
+        static int AddedLight(Color32[] baseline, Color32[] current, RectInt area, out float centreX, bool onSky = false)
         {
             int count = 0;
             float sum = 0;
@@ -371,8 +403,10 @@ namespace ReferenceHouseTools
                     int index = (Screen.height - 1 - topY) * Screen.width + x;
                     var old = baseline[index];
                     var value = current[index];
-                    if (value.r >= 240 && value.g >= 205 && value.b >= 110 &&
-                        value.g > old.g + 14 && value.r > old.r + 10) { count++; sum += x; }
+                    // On the bright blue sky the sunlit streak is warmer, with little change in green.
+                    bool lit = onSky ? value.r > old.r + 12 && value.r - value.b > old.r - old.b + 25 :
+                        value.r >= 240 && value.g >= 205 && value.b >= 110 && value.g > old.g + 14 && value.r > old.r + 10;
+                    if (lit) { count++; sum += x; }
                 }
             centreX = count > 0 ? sum / count : 0;
             return count;
