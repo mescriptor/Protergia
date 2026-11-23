@@ -14,7 +14,7 @@ using Hotspot = ReferenceHouseTools.ReferenceHouseDiagram.Hotspot;
 
 namespace ReferenceHouseTools
 {
-    /// <summary>Checks rendered equipment highlights in Editor Play mode; never builds a player.</summary>
+    /// <summary>Checks rendered equipment highlights and sequential cable energy in Editor Play mode.</summary>
     [InitializeOnLoad]
     public static class ReferenceHouseHighlightVerification
     {
@@ -45,7 +45,11 @@ namespace ReferenceHouseTools
                 throw new InvalidOperationException("Equipment highlight verification is already running.");
             Directory.CreateDirectory(Output);
             finished = false;
-            report = new Report { status = "running", startedAtUtc = DateTime.UtcNow.ToString("O") };
+            report = new Report
+            {
+                status = "running", startedAtUtc = DateTime.UtcNow.ToString("O"),
+                captureDirectory = Output + "/flow-verification/" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff")
+            };
             WriteReport();
             SessionState.SetString(StartedKey, report.startedAtUtc);
             SessionState.SetBool(PendingKey, true);
@@ -179,9 +183,11 @@ namespace ReferenceHouseTools
                     yield return Press(keyboard, Keys[i]);
                     Expect(bridge, expected, "Key " + productNumber + " selects only " + expected);
                     var blocked = VisibleCardBounds(wall);
+                    Color32[] selectedBaseline = null;
                     yield return Capture("Highlight_" + productNumber + "_" + expected, frame =>
                     {
                         var pixels = frame.GetPixels32();
+                        selectedBaseline = pixels;
                         int added = CountAddedAmber(diagram, expected, baseline, pixels, blocked);
                         Require(added >= 6, expected + " gains visible amber outline pixels (" + added + ")");
                         report.pixels.Add(new PixelResult { product = expected.ToString(), addedAmberPixels = added });
@@ -191,6 +197,7 @@ namespace ReferenceHouseTools
                             Require(staleMeter <= 3, "Meter outline is cleared while " + expected + " is selected (" + staleMeter + " extra amber pixels)");
                         }
                     });
+                    yield return VerifyFlow(diagram, expected, baseline, selectedBaseline);
                 }
 
                 yield return Press(keyboard, Key.Digit5);
@@ -208,11 +215,17 @@ namespace ReferenceHouseTools
                 yield return Press(keyboard, Key.Digit1);
                 yield return Press(keyboard, Key.Escape);
                 Expect(bridge, null, "Escape clears the active object highlight");
+                cfg.popupTimeoutSec = .2f;
+                yield return Press(keyboard, Key.Digit4);
+                yield return new WaitForSecondsRealtime(.35f);
+                Expect(bridge, null, "Automatic card timeout also stops energy flow");
+                cfg.popupTimeoutSec = 0;
                 yield return Press(keyboard, Key.Digit3);
                 controller.GoTo(CornerState.Attract);
                 Expect(bridge, null, "Returning to videos clears every object highlight");
                 report.keyboardBindingsVerified = true;
                 report.renderedHighlightsVerified = true;
+                report.energyFlowVerified = true;
             }
             finally
             {
@@ -242,6 +255,127 @@ namespace ReferenceHouseTools
                     if (ReferenceHouseDiagram.Labels[i].Id == expected.Value) index = i;
             Require(bridge.wall.SelectedIndex == index && bridge.diagram.SelectedIndex == index &&
                 bridge.diagram.HighlightedObject == expected, message);
+            var flow = bridge.diagram.EnergyFlow;
+            Require(expected.HasValue ? flow && flow.enabled && flow.SelectedProduct == expected :
+                !flow || (!flow.enabled && !flow.SelectedProduct.HasValue), message + " (energy follows selection)");
+        }
+
+        static IEnumerator VerifyFlow(ReferenceHouseDiagram diagram, Hotspot product, Color32[] baseline, Color32[] selectedBaseline)
+        {
+            var flow = diagram.EnergyFlow;
+            bool endsAtBattery = product == Hotspot.Photovoltaics || product == Hotspot.Battery;
+            Require(flow.Destination == (endsAtBattery ? Hotspot.Battery : product), product + " routes to the requested destination");
+            Require(flow.CurrentStage == ReferenceHouseEnergyFlow.Stage.PanelsToBattery && flow.ElapsedSeconds < 1,
+                product + " restarts at the panels when selected");
+            var source = new RectInt(530, 1100, 255, 65);
+            var meter = new RectInt(850, 920, 230, 205);
+            // Stop before x=1252, where the open meter card covers this cable.
+            var charger = new RectInt(940, 1149, 300, 45);
+            // Exclude the battery's own amber outline at x=722 from this branch sample.
+            var pump = new RectInt(555, 1318, 145, 50);
+
+            // All cards leave this portion of the source cable visible. The moving white
+            // pulse is measured against the static baseline, separately from amber highlights.
+            while (flow.ElapsedSeconds < flow.SourceSeconds * .77f) yield return null;
+            float firstX = 0;
+            yield return Capture("Flow_" + product + "_PanelsToBattery", frame =>
+            {
+                var pixels = frame.GetPixels32();
+                int lit = AddedLight(baseline, pixels, source, out firstX);
+                Require(lit >= 5, product + " has a visible pulse on the panels-to-battery cable (" + lit + " pixels)");
+                if (product != Hotspot.HeatPump) // This card covers most of the vertical cable.
+                {
+                    int bands = LightBands(baseline, pixels, new RectInt(375, 430, 28, 680));
+                    Require(bands >= 4, product + " shows at least four separate bright pulses on the source cable (" + bands + ")");
+                }
+                Require(AddedLight(selectedBaseline, pixels, meter, out _) == 0 &&
+                    AddedLight(selectedBaseline, pixels, charger, out _) == 0 && AddedLight(selectedBaseline, pixels, pump, out _) == 0,
+                    product + " does not energize downstream branches before battery arrival");
+            });
+            if (product == Hotspot.Meter)
+            {
+                yield return new WaitForSecondsRealtime(.05f);
+                yield return Capture("Flow_Meter_PanelsToBattery_Moved", frame =>
+                {
+                    int lit = AddedLight(baseline, frame.GetPixels32(), source, out float nextX);
+                    Require(lit >= 5 && nextX > firstX + 15, "Energy visibly moves towards the battery along the cable");
+                });
+            }
+            while (flow.ElapsedSeconds < flow.SourceSeconds + .06f) yield return null;
+            Require(flow.CurrentStage == (endsAtBattery ? ReferenceHouseEnergyFlow.Stage.Arrival :
+                ReferenceHouseEnergyFlow.Stage.BatteryArrival), product + " reaches the battery before any destination leg");
+            yield return Capture("Flow_" + product + "_BatteryArrival", null);
+            if (endsAtBattery)
+            {
+                while (flow.ElapsedSeconds < flow.SourceSeconds + flow.TrainSeconds + .5f) yield return null;
+                yield return Capture("Flow_" + product + "_EndsAtBattery", frame =>
+                {
+                    var pixels = frame.GetPixels32();
+                    Require(AddedLight(selectedBaseline, pixels, meter, out _) == 0 &&
+                        AddedLight(selectedBaseline, pixels, charger, out _) == 0 && AddedLight(selectedBaseline, pixels, pump, out _) == 0,
+                        product + " ends at the battery without feeding other devices");
+                });
+            }
+            else
+            {
+                float travelSeconds = flow.DeliverySeconds;
+                while (flow.ElapsedSeconds < flow.DeliveryStartSeconds + travelSeconds * .5f) yield return null;
+                // Saving the battery screenshot can outlast the first pulse on the short pump cable.
+                // Following pulses remain in flight, so inspect the whole train's delivery window.
+                Require(flow.LoopSeconds >= flow.DeliveryStartSeconds &&
+                    flow.LoopSeconds < flow.DeliveryStartSeconds + flow.TrainSeconds + travelSeconds,
+                    product + " continues from the battery onto the selected equipment branch");
+                yield return Capture("Flow_" + product + "_BatteryToEquipment", frame =>
+                {
+                    var pixels = frame.GetPixels32();
+                    var selected = product == Hotspot.Meter ? meter : product == Hotspot.Charger ? charger : pump;
+                    int lit = AddedLight(selectedBaseline, pixels, selected, out _);
+                    Require(lit >= 5, product + " receives a visible pulse on its own cable (" + lit + " pixels)");
+                    if (product != Hotspot.Meter) Require(AddedLight(selectedBaseline, pixels, meter, out _) == 0, product + " leaves the meter branch inactive");
+                    if (product != Hotspot.Charger) Require(AddedLight(selectedBaseline, pixels, charger, out _) == 0, product + " leaves the charger branch inactive");
+                    if (product != Hotspot.HeatPump) Require(AddedLight(selectedBaseline, pixels, pump, out _) == 0, product + " leaves the heat-pump branch inactive");
+                });
+            }
+            if (product == Hotspot.Meter)
+            {
+                while (flow.ElapsedSeconds < flow.CycleSeconds + .08f) yield return null;
+                Require(flow.CurrentStage == ReferenceHouseEnergyFlow.Stage.PanelsToBattery,
+                    "Energy repeats from the panels while the card remains open");
+            }
+        }
+
+        // Count separated illuminated bands in the vertical cable, independently of the pulse count in code.
+        static int LightBands(Color32[] baseline, Color32[] current, RectInt area)
+        {
+            int bands = 0, darkRows = 6;
+            for (int y = area.yMin; y < area.yMax; y++)
+            {
+                bool lit = AddedLight(baseline, current, new RectInt(area.xMin, y, area.width, 1), out _) >= 2;
+                if (lit)
+                {
+                    if (darkRows >= 6) bands++;
+                    darkRows = 0;
+                }
+                else darkRows++;
+            }
+            return bands;
+        }
+
+        static int AddedLight(Color32[] baseline, Color32[] current, RectInt area, out float centreX)
+        {
+            int count = 0;
+            float sum = 0;
+            for (int topY = area.yMin; topY < area.yMax; topY++)
+                for (int x = area.xMin; x < area.xMax; x++)
+                {
+                    int index = (Screen.height - 1 - topY) * Screen.width + x;
+                    var old = baseline[index];
+                    var value = current[index];
+                    if (value.r >= 240 && value.g >= 205 && value.b >= 110 &&
+                        value.g > old.g + 14 && value.r > old.r + 10) { count++; sum += x; }
+                }
+            centreX = count > 0 ? sum / count : 0;
+            return count;
         }
 
         static int CountAddedAmber(ReferenceHouseDiagram diagram, Hotspot product, Color32[] baseline,
@@ -320,7 +454,11 @@ namespace ReferenceHouseTools
             if (!image) throw new InvalidOperationException("Could not capture " + name);
             try
             {
-                string path = Output + "/" + name + "_" + image.width + "x" + image.height + ".png";
+                // A preview may still be open in a Windows viewer from the previous run.
+                // Keep each run's captures separate so mapped images never block verification.
+                string directory = string.IsNullOrEmpty(report.captureDirectory) ? Output : report.captureDirectory;
+                Directory.CreateDirectory(directory);
+                string path = directory + "/" + name + "_" + image.width + "x" + image.height + ".png";
                 File.WriteAllBytes(path, image.EncodeToPNG());
                 report.screenshots.Add(path);
                 inspect?.Invoke(image);
@@ -367,9 +505,9 @@ namespace ReferenceHouseTools
 
         [Serializable] sealed class Report
         {
-            public string status, startedAtUtc, finishedAtUtc, error;
+            public string status, startedAtUtc, finishedAtUtc, error, captureDirectory;
             public int screenWidth, screenHeight;
-            public bool keyboardBindingsVerified, renderedHighlightsVerified;
+            public bool keyboardBindingsVerified, renderedHighlightsVerified, energyFlowVerified;
             public List<string> checks = new List<string>();
             public List<string> screenshots = new List<string>();
             public List<PixelResult> pixels = new List<PixelResult>();

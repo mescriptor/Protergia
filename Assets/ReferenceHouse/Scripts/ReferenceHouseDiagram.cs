@@ -42,6 +42,7 @@ namespace ReferenceHouseTools
         public bool cardBackground;
         int selectedIndex = -1;
         public int SelectedIndex => selectedIndex;
+        public ReferenceHouseEnergyFlow EnergyFlow { get; private set; }
 
         [Serializable]
         public sealed class EquipmentOutline
@@ -66,8 +67,25 @@ namespace ReferenceHouseTools
 
         public void SetSelected(int index)
         {
+            if (index < 0 || index >= Labels.Count) index = -1;
             if (selectedIndex == index) return;
             selectedIndex = index;
+            if (!cardBackground && index >= 0 && !EnergyFlow)
+            {
+                var layer = new GameObject("Energy flow | panels to battery to equipment",
+                    typeof(RectTransform), typeof(CanvasRenderer), typeof(ReferenceHouseEnergyFlow));
+                layer.layer = gameObject.layer;
+                layer.transform.SetParent(transform, false);
+                layer.transform.SetAsFirstSibling(); // Keep labels and cards above the light trails.
+                var bounds = (RectTransform)layer.transform;
+                bounds.anchorMin = Vector2.zero;
+                bounds.anchorMax = Vector2.one;
+                bounds.offsetMin = bounds.offsetMax = Vector2.zero;
+                EnergyFlow = layer.GetComponent<ReferenceHouseEnergyFlow>();
+                EnergyFlow.raycastTarget = false;
+                EnergyFlow.maskable = maskable;
+            }
+            if (EnergyFlow) EnergyFlow.Select(index >= 0 ? Labels[index].Id : (Hotspot?)null);
             SetVerticesDirty();
         }
 
@@ -81,7 +99,7 @@ namespace ReferenceHouseTools
         };
 
         // Branches follow the roof edge, front slabs and basement equipment.
-        static readonly Vector2[][] CableRuns =
+        internal static readonly Vector2[][] CableRuns =
         {
             new[] { P(513, 375), P(389, 392), P(389, 1117), P(779, 1138), P(779, 1228) },
             new[] { P(543, 1348), P(607, 1355), P(660, 1332), P(722, 1335) },
@@ -228,20 +246,7 @@ namespace ReferenceHouseTools
         // antialias the wire even when the native canvas has multisampling disabled.
         void Stroke(VertexHelper vh, Vector2[] path, float width, float bend, Color32 fill)
         {
-            centreLine.Clear();
-            centreLine.Add(path[0]);
-            for (int i = 1; i < path.Length - 1; i++)
-            {
-                Vector2 corner = path[i], incoming = path[i - 1] - corner, outgoing = path[i + 1] - corner;
-                float inset = Mathf.Min(bend, Mathf.Min(incoming.magnitude, outgoing.magnitude) * .5f);
-                Vector2 entry = corner + incoming.normalized * inset, exit = corner + outgoing.normalized * inset;
-                for (int j = 0; j <= 8; j++)
-                {
-                    float t = j / 8f;
-                    centreLine.Add(Vector2.Lerp(Vector2.Lerp(entry, corner, t), Vector2.Lerp(corner, exit, t), t));
-                }
-            }
-            centreLine.Add(path[path.Length - 1]);
+            ReferenceHouseCablePath.SampleRounded(path, bend, centreLine);
             float half = width / 2;
             Color32 clear = fill;
             clear.a = 0;
